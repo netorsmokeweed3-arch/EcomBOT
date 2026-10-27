@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, SafeAreaView, StatusBar, RefreshControl } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { Order } from './src/types/order';
 import { ApiService } from './src/services/api';
 
-export default function App() {
+// Імпортуємо інші екрани для сайдбару
+import IntegrationsScreen from './src/screens/IntegrationsScreen';
+import AIScreen from './src/screens/AIScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+
+// Головний компонент списку замовлень (твій дизайн)
+function OrdersScreen() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Функція для завантаження замовлень через наш сервіс
   const loadOrders = async () => {
     setLoading(true);
     const data = await ApiService.getOrders();
@@ -50,11 +57,6 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f7" />
       
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>EcomBot 📦</Text>
-        <Text style={styles.headerSubtitle}>Замовлення Prom.ua</Text>
-      </View>
-
       <FlatList
         data={orders}
         keyExtractor={(item) => item.id}
@@ -69,11 +71,56 @@ export default function App() {
   );
 }
 
+const Drawer = createDrawerNavigator();
+
+// Сайдбар навігатор, який об'єднує всі твої розділи
+function DrawerNavigator() {
+  return (
+    <Drawer.Navigator
+      initialRouteName="Orders"
+      screenOptions={{
+        headerStyle: { backgroundColor: '#ffffff' },
+        headerTintColor: '#1c1c1e',
+        drawerActiveTintColor: '#007aff',
+        drawerInactiveTintColor: '#3a3a3c',
+        drawerLabelStyle: { fontSize: 16, fontWeight: '600' },
+      }}
+    >
+      <Drawer.Screen 
+        name="Orders" 
+        component={OrdersScreen} 
+        options={{ title: '📦 Замовлення Prom.ua' }} 
+      />
+      <Drawer.Screen 
+        name="Integrations" 
+        component={IntegrationsScreen} 
+        options={{ title: '🔌 Інтеграції (Магазини)' }} 
+      />
+      <Drawer.Screen 
+        name="AI" 
+        component={AIScreen} 
+        options={{ title: '🤖 ШІ-Помічник' }} 
+      />
+      <Drawer.Screen 
+        name="Settings" 
+        component={SettingsScreen} 
+        options={{ title: '⚙️ Налаштування' }} 
+      />
+    </Drawer.Navigator>
+  );
+}
+
+// Головний експорт додатку
+export default function App() {
+  return (
+    <NavigationContainer>
+      <DrawerNavigator />
+    </NavigationContainer>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f7' },
-  header: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 10, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e5e5ea' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#1c1c1e' },
-  headerSubtitle: { fontSize: 14, color: '#8e8e93', marginTop: 2 },
   listContainer: { padding: 16 },
   card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
