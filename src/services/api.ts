@@ -1,7 +1,7 @@
 import { Order } from '../types/order';
 
-// Для Android emulator використовуємо 10.0.2.2 або твою локальну IP
-const API_BASE_URL = 'http://192.168.1.114:5000';
+// Хмарна адреса твого бекенду на Render
+const API_BASE_URL = 'https://ecombot-2.onrender.com';
 
 export class ApiService {
   static async getOrders(): Promise<Order[]> {
