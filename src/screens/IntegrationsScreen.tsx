@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, SafeAreaVie
 import { createMMKV } from 'react-native-mmkv';
 
 const storage = createMMKV();
-export const RENDER_SERVER_URL = 'https://ecombot-backend.onrender.com';
+export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
 
 interface ShopIntegration {
   id: string;

@@ -16,4 +16,6 @@ export interface Order {
   totalAmount: number;
   createdAt: string;
   items: OrderItem[];
+  chatHistory?: string;
+
 }

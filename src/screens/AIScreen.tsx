@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { ApiService } from '../services/api';
+import { StyleSheet, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { ApiService, getErrorMessage } from '../services/api';
+import { AIReport } from '../types/aiReport';
+import AIReportView from '../components/AIReportView';
 
 export default function AIScreen() {
-  const [report, setReport] = useState<string>('');
+  const [report, setReport] = useState<AIReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
   const handleRunAIAnalysis = async () => {
     setLoading(true);
     try {
-      // 1. Спочатку затягуємо замовлення з нашого бекенда (які підтягнулися з Prom.ua)
-      const orders = await ApiService.getOrders();
-      
-      // 2. Беремо для прикладу перше замовлення та симулюємо/збираємо історію чату
-      const sampleOrder = orders.length > 0 ? JSON.stringify(orders[0]) : "Немає нових замовлень";
-      const sampleChat = "Покупець запитав: 'Чи є цей товар синього кольору в наявності?' Продавець відповів: 'Так, є в наявності, відправляємо сьогодні.'";
+      // 1. Завантажуємо замовлення з усіх підключених магазинів
+      const orders = await ApiService.getAllOrders();
+      if (orders.length === 0) {
+        Alert.alert('Увага ⚠️', 'Немає замовлень для аналізу.');
+        return;
+      }
 
-      // 3. Відправляємо це все на наш сервер на обробку до Claude Haiku 5.5
-      const aiResult = await ApiService.processWithAI(sampleOrder, sampleChat);
-      setReport(aiResult);
+      // 2. Аналізуємо перше замовлення разом з історією його переписки з покупцем
+      const [firstOrder] = orders;
+      const aiReport = await ApiService.processWithAI(firstOrder, firstOrder.chatHistory ?? '');
+      setReport(aiReport);
     } catch (error) {
-      console.error(error);
-      setReport("Сталася помилка при аналізі.");
+      Alert.alert('Помилка ❌', getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -40,12 +42,7 @@ export default function AIScreen() {
         )}
       </TouchableOpacity>
 
-      {report ? (
-        <View style={styles.reportContainer}>
-          <Text style={styles.reportTitle}>Звіт від штучного інтелекту:</Text>
-          <Text style={styles.reportText}>{report}</Text>
-        </View>
-      ) : null}
+      {report ? <AIReportView report={report} /> : null}
     </ScrollView>
   );
 }
@@ -56,7 +53,4 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 20 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  reportContainer: { backgroundColor: '#fff', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: '#ddd' },
-  reportTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 10 },
-  reportText: { fontSize: 14, color: '#444', lineHeight: 20 },
 });
