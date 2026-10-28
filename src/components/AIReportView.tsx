@@ -1,63 +1,129 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { AIReport } from '../types/aiReport';
+import React, { useState } from 'react';
+import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface AIReportViewProps {
-  report: AIReport;
+  report: any;
+  totalAmount?: number | string | null;
 }
 
-export default function AIReportView({ report }: AIReportViewProps) {
+// Універсальний нормалізатор: перетворює будь-яку структуру (Prom або ШІ) на чисті дані
+const normalizeOrderData = (input: any, fallbackAmount?: number | string | null) => {
+  if (!input) return { name: 'Клієнт', phone: '', address: '', sum: '', orderId: '', rawText: '' };
+
+  // Якщо вхідні дані — це строка (сирий звіт ШІ)
+  if (typeof input === 'string') {
+    return {
+      name: 'Клієнт із чату',
+      phone: '',
+      address: 'Звіт ШІ',
+      sum: fallbackAmount ? `${fallbackAmount} грн` : '',
+      orderId: '',
+      rawText: input,
+    };
+  }
+
+  // Якщо це об'єкт замовлення з Prom (як на вашому JSON)
+  const client = input.client || {};
+  const firstName = client.first_name || '';
+  const lastName = client.last_name || '';
+  const fullName = (lastName || firstName) ? `${lastName} ${firstName}`.trim() : (input.customerName || 'Клієнт');
+
+  const phone = input.phone || client.phone || '';
+  const orderId = input.orderNumber || input.id || '';
+  const status = input.status_name || input.orderStatus || 'Новий';
+
+  // Сума замовлення
+  const rawSum = fallbackAmount || input.totalAmount || input.price || '0';
+  const sumText = `${String(rawSum).replace(/[^\d.]/g, '')} грн`;
+
+  // Доставка
+  const delivery = input.delivery_option || {};
+  const city = input.city || '';
+  const postOffice = input.postOffice || '';
+  const deliveryName = [city, postOffice, delivery.name].filter(Boolean).join(', ') || 'Нова Пошта';
+
+  // Повний текст для розгорнутого стану (очищений від зайвого JSON)
+  const rawText = input.rawReport || input.text || JSON.stringify(input, null, 2);
+
+  return {
+    name: fullName,
+    phone,
+    address: deliveryName,
+    sum: sumText,
+    orderId,
+    status,
+    rawText,
+  };
+};
+
+export default function AIReportView({ report, totalAmount }: AIReportViewProps) {
+  const [expanded, setExpanded] = useState<boolean>(false);
+
+  const toggleExpand = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded((prev) => !prev);
+  };
+
+  const data = normalizeOrderData(report, totalAmount);
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🤖 Звіт ШІ</Text>
+    <View style={styles.card}>
+      {/* Головна професійна картка замовлення */}
+      <View style={styles.headerTop}>
+        <Text style={styles.orderIdText}>Prom #{data.orderId || '—'}</Text>
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusText}>{data.status.toUpperCase()}</Text>
+        </View>
+      </View>
 
-      <Row label="Клієнт" value={report.customerName} />
-      <Row label="Телефон" value={report.phone} />
-      <Row label="Місто" value={report.city} />
-      <Row label="Відділення НП" value={report.postOffice} />
-      <Row label="Статус" value={report.orderStatus} />
+      <Text style={styles.clientName} numberOfLines={1}>{data.name}</Text>
+      {data.phone ? <Text style={styles.phoneText}>📞 {data.phone}</Text> : null}
 
-      <Text style={styles.sectionTitle}>Товари</Text>
-      {report.products.length > 0 ? (
-        report.products.map((product, index) => (
-          <Text key={`${product}-${index}`} style={styles.listItem}>• {product}</Text>
-        ))
-      ) : (
-        <Text style={styles.muted}>Товари не вказано</Text>
+      <View style={styles.locationContainer}>
+        <Text style={styles.pinIcon}>📍</Text>
+        <Text style={styles.locationText} numberOfLines={1}>{data.address}</Text>
+      </View>
+
+      <View style={styles.footerRow}>
+        <Text style={styles.orderSum}>{data.sum}</Text>
+        <TouchableOpacity activeOpacity={0.7} onPress={toggleExpand} style={styles.toggleButton}>
+          <Text style={styles.expandHint}>{expanded ? 'Згорнути ▲' : 'Деталі замовлення ▼'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Розгорнутий блок з повним звітом (ховається, поки не натиснули) */}
+      {expanded && (
+        <View style={styles.bodyContainer}>
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>🤖 Повний звіт та аналіз ШІ</Text>
+          <Text style={styles.fullReportText}>{data.rawText}</Text>
+        </View>
       )}
-
-      <Text style={styles.sectionTitle}>Аналіз переписки</Text>
-      <Text style={styles.bodyText}>{report.chatAnalysis || 'Переписка відсутня'}</Text>
-
-      {report.recommendations.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>Рекомендації</Text>
-          {report.recommendations.map((item, index) => (
-            <Text key={`${item}-${index}`} style={styles.listItem}>• {item}</Text>
-          ))}
-        </>
-      )}
-    </View>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}:</Text>
-      <Text style={styles.value}>{value || '—'}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: '#f9f9fb', borderRadius: 12, padding: 12, marginTop: 12, borderWidth: 1, borderColor: '#e5e5ea' },
-  title: { fontSize: 15, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 8 },
-  row: { flexDirection: 'row', marginBottom: 4 },
-  label: { fontSize: 14, color: '#8e8e93', width: 120 },
-  value: { flex: 1, fontSize: 14, color: '#1c1c1e', fontWeight: '500' },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#3a3a3c', marginTop: 10, marginBottom: 4 },
-  listItem: { fontSize: 14, color: '#3a3a3c', marginBottom: 2 },
-  bodyText: { fontSize: 14, color: '#3a3a3c', lineHeight: 20 },
-  muted: { fontSize: 14, color: '#8e8e93' },
+  card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, marginTop: 12, borderWidth: 1, borderColor: '#e5e5ea', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  orderIdText: { fontSize: 13, fontWeight: '700', color: '#007aff' },
+  statusBadge: { backgroundColor: '#fff0f0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  statusText: { fontSize: 10, fontWeight: '700', color: '#ff3b30' },
+  clientName: { fontSize: 18, fontWeight: '700', color: '#1c1c1e', marginBottom: 2 },
+  phoneText: { fontSize: 14, color: '#8e8e93', fontWeight: '500', marginBottom: 6 },
+  locationContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  pinIcon: { fontSize: 13, marginRight: 4 },
+  locationText: { fontSize: 13, color: '#3a3a3c', fontWeight: '500', flex: 1 },
+  footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f2f2f7' },
+  orderSum: { fontSize: 16, fontWeight: '700', color: '#34c759' },
+  toggleButton: { paddingVertical: 4 },
+  expandHint: { fontSize: 13, color: '#007aff', fontWeight: '600' },
+  divider: { height: 1, backgroundColor: '#e5e5ea', marginVertical: 10 },
+  bodyContainer: { marginTop: 4 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#1c1c1e', marginBottom: 6 },
+  fullReportText: { fontSize: 12, color: '#3a3a3c', lineHeight: 18, backgroundColor: '#f9f9fb', padding: 10, borderRadius: 8 },
 });
