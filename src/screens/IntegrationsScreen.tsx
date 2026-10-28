@@ -97,7 +97,7 @@ export default function IntegrationsScreen() {
         <Text style={styles.label}>Назва магазину</Text>
         <TextInput
           style={styles.input}
-          placeholder="Наприклад: Prom Одеса"
+          placeholder="Наприклад: my-store або my-store.myshopify.com"
           placeholderTextColor="#8e8e93"
           value={shopName}
           onChangeText={setShopName}

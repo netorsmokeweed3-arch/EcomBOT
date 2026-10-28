@@ -37,7 +37,6 @@ interface AIResponse {
 interface RequestOptions {
   method?: 'GET' | 'POST';
   body?: unknown;
-  shopToken?: string;
 }
 
 // Універсальний запит з тайм-аутом і перетворенням помилок у ApiError
@@ -51,9 +50,6 @@ async function request<T extends { success: boolean; error?: string }>(
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
-  }
-  if (options.shopToken) {
-    headers.Authorization = `Bearer ${options.shopToken}`;
   }
 
   try {
@@ -108,10 +104,14 @@ export class ApiService {
     }
   }
 
-  // Замовлення одного магазину; токен передається бекенду, який звертається до Prom API
-  static async getOrders(shopToken: string): Promise<Order[]> {
-    const data = await request<OrdersResponse>('/api/orders', { shopToken });
-    return data.orders ?? [];
+  // Замовлення одного магазину: назва (shop) і токен (token) передаються в тілі POST-запиту
+  static async getOrders(shop: ShopIntegration): Promise<Order[]> {
+    const data = await request<OrdersResponse>('/api/orders', {
+      method: 'POST',
+      body: { shop: shop.name, token: shop.token },
+    });
+    // Позначаємо кожне замовлення магазином-джерелом, щоб аналіз знав, з якого воно магазину
+    return (data.orders ?? []).map((order) => ({ ...order, shopId: shop.id, shopName: shop.name }));
   }
 
   // Замовлення з усіх підключених магазинів.
@@ -122,7 +122,7 @@ export class ApiService {
       throw new ApiError('Немає підключених магазинів. Додайте магазин у «Інтеграціях».', 'config');
     }
 
-    const results = await Promise.allSettled(shops.map((shop) => this.getOrders(shop.token)));
+    const results = await Promise.allSettled(shops.map((shop) => this.getOrders(shop)));
     const orders: Order[] = [];
     let firstError: unknown = null;
 
@@ -140,11 +140,11 @@ export class ApiService {
     return orders;
   }
 
-  // Надсилання замовлення та історії чату на бекенд для аналізу через Claude
-  static async processWithAI(order: Order, chatHistory: string): Promise<AIReport> {
+  // Надсилання замовлення, історії чату та даних магазину (shop, token) на бекенд для аналізу через Claude
+  static async processWithAI(order: Order, chatHistory: string, shop: ShopIntegration): Promise<AIReport> {
     const data = await request<AIResponse>('/api/process-ai', {
       method: 'POST',
-      body: { order_data: order, chat_messages: chatHistory },
+      body: { shop: shop.name, token: shop.token, order_data: order, chat_messages: chatHistory },
     });
 
     if (!data.ai_report) {

@@ -20,7 +20,13 @@ export default function AIScreen() {
 
       // 2. Аналізуємо перше замовлення разом з історією його переписки з покупцем
       const [firstOrder] = orders;
-      const aiReport = await ApiService.processWithAI(firstOrder, firstOrder.chatHistory ?? '');
+      // 3. Знаходимо магазин, якому належить замовлення, щоб передати його дані на бекенд
+      const shop = ApiService.getSavedShops().find((saved) => saved.id === firstOrder.shopId);
+      if (!shop) {
+        Alert.alert('Помилка ❌', 'Не знайдено магазин для цього замовлення.');
+        return;
+      }
+      const aiReport = await ApiService.processWithAI(firstOrder, firstOrder.chatHistory ?? '', shop);
       setReport(aiReport);
     } catch (error) {
       Alert.alert('Помилка ❌', getErrorMessage(error));

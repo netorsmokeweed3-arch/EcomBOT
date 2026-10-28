@@ -17,5 +17,8 @@ export interface Order {
   createdAt: string;
   items: OrderItem[];
   chatHistory?: string;
+  // Магазин, з якого отримано замовлення (додається клієнтом при завантаженні)
+  shopId?: string;
+  shopName?: string;
 
 }
