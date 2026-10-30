@@ -1,10 +1,5 @@
-export interface AIReport {
-  customerName: string;
-  phone: string;
-  city: string;
-  postOffice: string;
-  products: string[];
-  orderStatus: string;
-  chatAnalysis: string;
-  recommendations: string[];
+import { Order } from './order';
+
+export interface AIReport extends Order {
+  aiSummary: string;
 }

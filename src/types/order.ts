@@ -3,6 +3,10 @@ export interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  priceFormatted?: string;
+  lineTotal?: number;
+  lineTotalFormatted?: string;
+  sku?: string;
 }
 
 export interface Order {
@@ -11,14 +15,21 @@ export interface Order {
   customerName: string;
   phone: string;
   city: string;
-  postOffice: string;
-  status: 'new' | 'processing' | 'shipped' | 'completed';
+  region?: string;
+  postalCode?: string;
+  country?: string;
+  deliveryAddress: string;
+  deliveryMethod?: string;
+  email?: string;
+  status: string;
   totalAmount: number;
+  totalAmountFormatted?: string;
+  currency?: string;
   createdAt: string;
   items: OrderItem[];
+  aiSummary?: string;
   chatHistory?: string;
   // Магазин, з якого отримано замовлення (додається клієнтом при завантаженні)
   shopId?: string;
   shopName?: string;
-
 }
