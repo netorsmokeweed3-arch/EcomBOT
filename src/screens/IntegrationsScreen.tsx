@@ -1,9 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, SafeAreaView, StatusBar, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TextInput, 
+  TouchableOpacity, 
+  Alert, 
+  SafeAreaView, 
+  StatusBar, 
+  ScrollView, 
+  ActivityIndicator 
+} from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
 
 const storage = createMMKV();
 export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
+
+const STORAGE_KEYS = {
+  SAVED_SHOPS: 'saved_shops',
+  SERVER_URL: 'server_url',
+} as const;
 
 interface ShopIntegration {
   id: string;
@@ -11,60 +27,127 @@ interface ShopIntegration {
   token: string;
 }
 
+interface ShopCardProps {
+  shop: ShopIntegration;
+  isVisible: boolean;
+  onToggleToken: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+// Повністю оптимізована мемоізована картка магазину
+const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardProps) => {
+  const maskedToken = useMemo(() => {
+    return '•'.repeat(Math.min(shop.token.length, 20));
+  }, [shop.token]);
+
+  const handlePressToggle = useCallback(() => {
+    onToggleToken(shop.id);
+  }, [onToggleToken, shop.id]);
+
+  const handlePressDelete = useCallback(() => {
+    onDelete(shop.id);
+  }, [onDelete, shop.id]);
+
+  return (
+    <View style={styles.shopCard}>
+      <View style={styles.shopInfo}>
+        <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
+        <Text style={styles.shopToken} numberOfLines={1}>
+          Токен: {isVisible ? shop.token : maskedToken}
+        </Text>
+      </View>
+
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handlePressToggle}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.actionButtonText}>
+            {isVisible ? 'Сховати' : 'Показати'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={handlePressDelete}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.deleteButtonText}>Видалити</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
+
+ShopCard.displayName = 'ShopCard';
+
 export default function IntegrationsScreen() {
   const [shopName, setShopName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [shops, setShops] = useState<ShopIntegration[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   
-  // Стан для видимості токена в полі введення при наборі
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
+  const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
 
-  // Об'єкт для відстеження видимості токенів у списку збережених магазинів: { [id]: true/false }
-  const [showTokens, setShowTokens] = useState<{ [key: string]: boolean }>({});
-
-  useEffect(() => {
-    loadShops();
-  }, []);
-
-  const loadShops = () => {
+  const loadShops = useCallback(() => {
     try {
-      const savedShopsJson = storage.getString('saved_shops');
+      const savedShopsJson = storage.getString(STORAGE_KEYS.SAVED_SHOPS);
       if (savedShopsJson) {
-        setShops(JSON.parse(savedShopsJson));
+        const parsed = JSON.parse(savedShopsJson);
+        if (Array.isArray(parsed)) {
+          setShops(parsed);
+        }
       }
     } catch (error) {
       console.log('Помилка завантаження магазинів', error);
     }
-  };
+  }, []);
 
-  const handleSave = () => {
-    if (!shopName.trim() || !apiKey.trim()) {
+  useEffect(() => {
+    loadShops();
+  }, [loadShops]);
+
+  const handleSave = useCallback(() => {
+    const trimmedName = shopName.trim();
+    const trimmedToken = apiKey.trim();
+
+    if (!trimmedName || !trimmedToken) {
       Alert.alert('Помилка ❌', 'Будь ласка, введіть назву магазину та API-токен.');
       return;
     }
 
+    if (isSaving) return;
+    setIsSaving(true);
+
     try {
       const newShop: ShopIntegration = {
         id: Date.now().toString(),
-        name: shopName.trim(),
-        token: apiKey.trim(),
+        name: trimmedName,
+        token: trimmedToken,
       };
 
-      const updatedShops = [...shops, newShop];
-      storage.set('saved_shops', JSON.stringify(updatedShops));
-      storage.set('server_url', RENDER_SERVER_URL);
+      setShops((prevShops) => {
+        const updatedShops = [...prevShops, newShop];
+        storage.set(STORAGE_KEYS.SAVED_SHOPS, JSON.stringify(updatedShops));
+        return updatedShops;
+      });
 
-      setShops(updatedShops);
+      storage.set(STORAGE_KEYS.SERVER_URL, RENDER_SERVER_URL);
+
       setShopName('');
       setApiKey('');
       setIsApiKeyVisible(false);
       Alert.alert('Успіх ✅', 'Магазин успішно інтегровано!');
     } catch (error) {
       Alert.alert('Помилка ❌', 'Не вдалося зберегти інтеграцію.');
+    } finally {
+      setIsSaving(false);
     }
-  };
+  }, [shopName, apiKey, isSaving]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     Alert.alert(
       'Видалення',
       'Ви дійсно хочете видалити цей магазин?',
@@ -74,23 +157,48 @@ export default function IntegrationsScreen() {
           text: 'Видалити',
           style: 'destructive',
           onPress: () => {
-            const updatedShops = shops.filter((shop) => shop.id !== id);
-            storage.set('saved_shops', JSON.stringify(updatedShops));
-            setShops(updatedShops);
+            setShops((prevShops) => {
+              const updatedShops = prevShops.filter((shop) => shop.id !== id);
+              storage.set(STORAGE_KEYS.SAVED_SHOPS, JSON.stringify(updatedShops));
+              return updatedShops;
+            });
           },
         },
       ]
     );
-  };
+  }, []);
 
-  const toggleShowToken = (id: string) => {
+  const toggleShowToken = useCallback((id: string) => {
     setShowTokens((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  }, []);
+
+  const toggleApiKeyVisibility = useCallback(() => {
+    setIsApiKeyVisible((prev) => !prev);
+  }, []);
+
+  const renderedShopsList = useMemo(() => {
+    if (shops.length === 0) return null;
+
+    return (
+      <View style={styles.listContainer}>
+        <Text style={styles.listTitle}>Підключені магазини ({shops.length})</Text>
+        {shops.map((shop) => (
+          <ShopCard
+            key={shop.id}
+            shop={shop}
+            isVisible={!!showTokens[shop.id]}
+            onToggleToken={toggleShowToken}
+            onDelete={handleDelete}
+          />
+        ))}
+      </View>
+    );
+  }, [shops, showTokens, toggleShowToken, handleDelete]);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f7" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Підключення магазинів</Text>
         <Text style={styles.subtitle}>Додайте назву та API-токен вашого маркетплейса для синхронізації через ШІ.</Text>
 
@@ -101,6 +209,8 @@ export default function IntegrationsScreen() {
           placeholderTextColor="#8e8e93"
           value={shopName}
           onChangeText={setShopName}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
 
         <Text style={styles.label}>API-токен (Ключ доступу)</Text>
@@ -112,10 +222,13 @@ export default function IntegrationsScreen() {
             secureTextEntry={!isApiKeyVisible}
             value={apiKey}
             onChangeText={setApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <TouchableOpacity 
             style={styles.eyeButton} 
-            onPress={() => setIsApiKeyVisible(!isApiKeyVisible)}
+            onPress={toggleApiKeyVisibility}
+            activeOpacity={0.7}
           >
             <Text style={styles.eyeButtonText}>
               {isApiKeyVisible ? 'Сховати' : 'Показати'}
@@ -123,49 +236,20 @@ export default function IntegrationsScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Зберегти інтеграцію</Text>
+        <TouchableOpacity 
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
+          onPress={handleSave}
+          disabled={isSaving}
+          activeOpacity={0.8}
+        >
+          {isSaving ? (
+            <ActivityIndicator color="#ffffff" size="small" />
+          ) : (
+            <Text style={styles.saveButtonText}>Зберегти інтеграцію</Text>
+          )}
         </TouchableOpacity>
 
-        {/* Список підключених магазинів */}
-        {shops.length > 0 && (
-          <View style={styles.listContainer}>
-            <Text style={styles.listTitle}>Підключені магазини ({shops.length})</Text>
-            {shops.map((shop) => {
-              const isVisible = showTokens[shop.id];
-              const maskedToken = '•'.repeat(Math.min(shop.token.length, 20));
-
-              return (
-                <View key={shop.id} style={styles.shopCard}>
-                  <View style={styles.shopInfo}>
-                    <Text style={styles.shopName}>{shop.name}</Text>
-                    <Text style={styles.shopToken}>
-                      Токен: {isVisible ? shop.token : maskedToken}
-                    </Text>
-                  </View>
-
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => toggleShowToken(shop.id)}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {isVisible ? 'Сховати' : 'Показати'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDelete(shop.id)}
-                    >
-                      <Text style={styles.deleteButtonText}>Видалити</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
+        {renderedShopsList}
       </ScrollView>
     </SafeAreaView>
   );
@@ -179,13 +263,13 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#3a3a3c', marginBottom: 6 },
   input: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#1c1c1e', marginBottom: 16 },
   
-  // Стилі для поля введення токена з кнопкою перемикання
   passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea', borderRadius: 12, marginBottom: 16 },
   passwordInput: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#1c1c1e' },
   eyeButton: { paddingHorizontal: 14, paddingVertical: 10 },
   eyeButtonText: { fontSize: 14, fontWeight: '600', color: '#007aff' },
 
   saveButton: { backgroundColor: '#007aff', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 24, shadowColor: '#007aff', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  saveButtonDisabled: { opacity: 0.7 },
   saveButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   listContainer: { marginTop: 10 },
   listTitle: { fontSize: 18, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 12 },

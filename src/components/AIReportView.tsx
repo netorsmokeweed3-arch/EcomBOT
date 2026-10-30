@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
-import { Order } from '../types/order';
+import { Order, OrderItem } from '../types/order';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -11,15 +11,72 @@ interface AIReportViewProps {
   totalAmount?: number | string | null;
 }
 
-// Визначаємо, чи текст замовлення написаний російською мовою
-const isRussianLanguage = (text: string): boolean => {
-  if (!text) return false;
-  // Перевіряємо наявність специфічних російських літер або слів
-  const ruPattern = /[ыэъё]|обработке|новый|выполнен|отменен/i;
-  return ruPattern.test(text);
-}
+// Мовні словники
+const DICTIONARY = {
+  uk: {
+    noClient: 'Клієнт не вказано',
+    noPhone: 'Телефон не вказано',
+    noAddress: 'Адресу не вказано',
+    noDetails: 'Деталі відсутні',
+    shop: '🏪 Магазин:',
+    orderNum: '📦 Номер замовлення:',
+    status: '🚚 Статус:',
+    date: '📅 Дата та час:',
+    client: '👤 Покупець:',
+    deliveryMethod: '🚚 Спосіб доставки:',
+    deliveryAddress: '📍 Адреса доставки:',
+    country: '🌍 Країна:',
+    city: '🏙 Місто:',
+    sum: '💳 Сума:',
+    itemsTitle: '🛍 Товари у замовленні:',
+    aiAnalysis: '🤖 Аналіз:',
+    detailsTitle: '📋 Детальна інформація замовлення',
+    collapse: '− Згорнути',
+    expand: '+ Деталі замовлення',
+    process: 'Обробити',
+    complete: 'Завершити',
+    currencyUah: 'грн'
+  },
+  ru: {
+    noClient: 'Клиент не указан',
+    noPhone: 'Телефон не указан',
+    noAddress: 'Адрес не указан',
+    noDetails: 'Детали отсутствуют',
+    shop: '🏪 Магазин:',
+    orderNum: '📦 Номер заказа:',
+    status: '🚚 Статус:',
+    date: '📅 Дата и время:',
+    client: '👤 Клиент:',
+    deliveryMethod: '🚚 Способ доставки:',
+    deliveryAddress: '📍 Адрес доставки:',
+    country: '🌍 Страна:',
+    city: '🏙 Город:',
+    sum: '💳 Сумма:',
+    itemsTitle: '🛍 Товары в заказе:',
+    aiAnalysis: '🤖 Анализ:',
+    detailsTitle: '📋 Подробная информация заказа',
+    collapse: '− Свернуть',
+    expand: '+ Детали заказа',
+    process: 'Обработать',
+    complete: 'Выполнено',
+    currencyUah: 'грн'
+  }
+};
 
-// Автоматичний адаптивний переклад статусів залежно від мови замовлення
+const isRussianLanguage = (input: Order): boolean => {
+  const textFields = [
+    input?.shopName,
+    input?.customerName,
+    input?.status,
+    input?.deliveryMethod,
+    input?.deliveryAddress,
+    input?.aiSummary
+  ].filter(Boolean).join(' ');
+
+  if (!textFields) return false;
+  return /[ыэъё]|обработке|новый|выполнен|отменен/i.test(textFields);
+};
+
 const getLocalizedStatus = (status: string, isRu: boolean): string => {
   if (!status) return isRu ? 'НОВЫЙ' : 'НОВИЙ';
   const lower = status.toLowerCase();
@@ -42,73 +99,8 @@ const getLocalizedStatus = (status: string, isRu: boolean): string => {
   return status.toUpperCase();
 };
 
-const formatPrettyDetails = (input: Order, isRu: boolean): string[] => {
-  const lines: string[] = [];
-  if (input.shopName) {
-    lines.push(isRu ? `🏪 Магазин: ${input.shopName}` : `🏪 Магазин: ${input.shopName}`);
-  }
-  const orderNumber = input.orderNumber || input.id;
-  if (orderNumber) {
-    lines.push(isRu ? `📦 Номер заказа: ${orderNumber}` : `📦 Номер замовлення: ${orderNumber}`);
-  }
-  if (input.status) {
-    lines.push(isRu ? `🚚 Статус: ${getLocalizedStatus(input.status, true)}` : `🚚 Статус: ${getLocalizedStatus(input.status, false)}`);
-  }
-  if (input.createdAt) {
-    const dateFormatted = new Date(input.createdAt).toLocaleString(isRu ? 'ru-RU' : 'uk-UA', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    if (dateFormatted !== 'Invalid Date') {
-      lines.push(isRu ? `📅 Дата и время: ${dateFormatted}` : `📅 Дата та час: ${dateFormatted}`);
-    }
-  }
-  if (input.customerName) {
-    lines.push(isRu ? `👤 Клиент: ${input.customerName}` : `👤 Покупець: ${input.customerName}`);
-  }
-  if (input.phone) {
-    lines.push(`📞 ${input.phone}`);
-  }
-  if (input.email) {
-    lines.push(`📧 ${input.email}`);
-  }
-  if (input.deliveryMethod) {
-    lines.push(isRu ? `🚚 Способ доставки: ${input.deliveryMethod}` : `🚚 Спосіб доставки: ${input.deliveryMethod}`);
-  }
-  if (input.deliveryAddress) {
-    lines.push(isRu ? `📍 Адрес доставки: ${input.deliveryAddress}` : `📍 Адреса доставки: ${input.deliveryAddress}`);
-  }
-  if (input.country) {
-    lines.push(isRu ? `🌍 Страна: ${input.country}` : `🌍 Країна: ${input.country}`);
-  }
-  if (input.city) {
-    lines.push(isRu ? `🏙 Город: ${input.city}` : `🏙 Місто: ${input.city}`);
-  }
-  if (input.totalAmountFormatted) {
-    lines.push(isRu ? `💳 Сумма: ${input.totalAmountFormatted}` : `💳 Сума: ${input.totalAmountFormatted}`);
-  }
-  if (input.items.length > 0) {
-    lines.push(isRu ? '\n🛍 Товары в заказе:' : '\n🛍 Товари у замовленні:');
-    input.items.forEach((item, index) => {
-      const itemTotal = item.lineTotalFormatted
-        || `${(item.lineTotal ?? item.price * item.quantity).toFixed(2)} ${input.currency === 'UAH' ? 'грн' : input.currency || 'UAH'}`;
-      const unitPrice = item.priceFormatted
-        || `${(item.price ?? 0).toFixed(2)} ${input.currency === 'UAH' ? 'грн' : input.currency || 'UAH'}`;
-      lines.push(`  • ${index + 1}. ${item.name} — ${item.quantity} шт. × ${unitPrice} = ${itemTotal}`);
-    });
-  }
-  if (input.aiSummary) {
-    lines.push(isRu ? `🤖 Анализ: ${input.aiSummary}` : `🤖 Аналіз: ${input.aiSummary}`);
-  }
-
-  return lines.length > 0 ? lines : [isRu ? 'Детали отсутствуют' : 'Деталі відсутні'];
-};
-
-// Крок статусу: 0 — в обробці, 1 — відправлено, 2 — виконано, -1 — скасовано
 const getStatusStep = (status: string): number => {
+  if (!status) return 0;
   const lower = status.toLowerCase();
   if (lower.includes('cancel') || lower.includes('скасов') || lower.includes('отмен')) return -1;
   if (lower.includes('completed') || lower.includes('fulfilled') || lower.includes('виконано') || lower.includes('выполнен')) return 2;
@@ -116,58 +108,98 @@ const getStatusStep = (status: string): number => {
   return 0;
 };
 
-export default function AIReportView({ report, totalAmount }: AIReportViewProps) {
+const OrderItemRow = memo(({ item, index, currency }: { item: OrderItem; index: number; currency?: string }) => {
+  const currencyLabel = currency === 'UAH' ? 'грн' : currency || 'UAH';
+  const uPrice = item?.price ?? 0;
+  const q = item?.quantity ?? 1;
+  const calcTotal = uPrice * q;
+
+  const itemTotal = item?.lineTotalFormatted || `${calcTotal.toFixed(2)} ${currencyLabel}`;
+  const unitPrice = item?.priceFormatted || `${uPrice.toFixed(2)} ${currencyLabel}`;
+
+  return (
+    <Text style={styles.detailLine}>
+      {`  • ${index + 1}. ${item?.name || 'Товар'} — ${q} шт. × ${unitPrice} = ${itemTotal}`}
+    </Text>
+  );
+});
+
+function AIReportView({ report, totalAmount }: AIReportViewProps) {
   const [expanded, setExpanded] = useState<boolean>(false);
-  // Локальна зміна статусу з кнопки; null — показуємо статус із даних замовлення
   const [statusOverride, setStatusOverride] = useState<string | null>(null);
 
-  const toggleExpand = () => {
+  const toggleExpand = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((prev) => !prev);
-  };
+  }, []);
 
-  // Перевіряємо мову замовленння (російська чи українська)
-  const rawTextForLang = JSON.stringify(report);
-  const isRu = isRussianLanguage(rawTextForLang);
+  const isRu = useMemo(() => isRussianLanguage(report), [report]);
+  const t = DICTIONARY[isRu ? 'ru' : 'uk'];
 
-  // Поля покупця завжди відображаються: якщо даних немає, показуємо заглушку
-  const clientName = report.customerName || (isRu ? 'Клиент не указан' : 'Клієнт не вказано');
-  const phone = report.phone || (isRu ? 'Телефон не указан' : 'Телефон не вказано');
-  // Заголовок: динамічна назва магазину та номер замовлення
-  const headerTitle = [report.shopName, report.orderNumber || report.id].filter(Boolean).join(' #');
-  const orderNumber = report.orderNumber || report.id || '—';
-  const rawStatus = statusOverride ?? (report.status || 'new');
-  const statusStep = getStatusStep(rawStatus);
-  // Наступний статус для кнопки: з «в обробці» — відправлено, з «відправлено» — виконано
+  const rawStatus = statusOverride ?? (report?.status || 'new');
+  const statusStep = useMemo(() => getStatusStep(rawStatus), [rawStatus]);
+  const orderStatus = useMemo(() => getLocalizedStatus(rawStatus, isRu), [rawStatus, isRu]);
+
+  const clientName = report?.customerName || t.noClient;
+  const phone = report?.phone || t.noPhone;
+  const headerTitle = useMemo(() => [report?.shopName, report?.orderNumber || report?.id].filter(Boolean).join(' #'), [report]);
+
   const nextStatus = statusStep === 0 ? 'shipped' : statusStep === 1 ? 'completed' : null;
-  const actionLabel = statusStep === 0
-    ? (isRu ? 'Обработать' : 'Обробити')
-    : (isRu ? 'Выполнено' : 'Завершити');
-  const orderStatus = getLocalizedStatus(rawStatus, isRu);
+  const actionLabel = statusStep === 0 ? t.process : t.complete;
 
-  // Динамічна дата та година створення замовлення
-  const rawDate = report.createdAt;
-  const parsedDate = rawDate ? new Date(rawDate) : null;
-  const dateText = parsedDate && !Number.isNaN(parsedDate.getTime())
-    ? parsedDate.toLocaleString(isRu ? 'ru-RU' : 'uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    : '';
+  const dateText = useMemo(() => {
+    if (!report?.createdAt) return '';
+    const parsedDate = new Date(report.createdAt);
+    if (Number.isNaN(parsedDate.getTime())) return '';
+    return parsedDate.toLocaleString(isRu ? 'ru-RU' : 'uk-UA', { 
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+    });
+  }, [report?.createdAt, isRu]);
 
-  // Сума замовлення
-  const amountValue = totalAmount ?? report.totalAmount;
-  const formattedAmount = typeof amountValue === 'number' ? amountValue.toFixed(2) : amountValue;
-  const sumText = report.totalAmountFormatted
-    || `${formattedAmount} ${report.currency === 'UAH' ? 'грн' : report.currency || 'UAH'}`;
+  const sumText = useMemo(() => {
+    const amountValue = totalAmount ?? report?.totalAmount;
+    const formattedAmount = typeof amountValue === 'number' ? amountValue.toFixed(2) : amountValue;
+    return report?.totalAmountFormatted || `${formattedAmount} ${report?.currency === 'UAH' ? t.currencyUah : report?.currency || t.currencyUah}`;
+  }, [totalAmount, report?.totalAmount, report?.totalAmountFormatted, report?.currency, t.currencyUah]);
 
-  // Доставка
-  const deliveryName = report.deliveryAddress || (isRu ? 'Адрес не указан' : 'Адресу не вказано');
+  const deliveryName = report?.deliveryAddress || t.noAddress;
 
-  const prettyDetailsLines = formatPrettyDetails({ ...report, status: rawStatus }, isRu);
+  const prettyDetailsLines = useMemo(() => {
+    if (!report) return [t.noDetails];
+    
+    const lines: string[] = [];
+    
+    if (report.shopName) lines.push(`${t.shop} ${report.shopName}`);
+    
+    const orderNum = report.orderNumber || report.id;
+    if (orderNum) lines.push(`${t.orderNum} ${orderNum}`);
+    
+    if (rawStatus) lines.push(`${t.status} ${orderStatus}`);
+    
+    if (dateText) lines.push(`${t.date} ${dateText}`);
+    
+    if (report.customerName) lines.push(`${t.client} ${report.customerName}`);
+    if (report.phone) lines.push(`📞 ${report.phone}`);
+    if (report.email) lines.push(`📧 ${report.email}`);
+    if (report.deliveryMethod) lines.push(`${t.deliveryMethod} ${report.deliveryMethod}`);
+    if (report.deliveryAddress) lines.push(`${t.deliveryAddress} ${report.deliveryAddress}`);
+    if (report.country) lines.push(`${t.country} ${report.country}`);
+    if (report.city) lines.push(`${t.city} ${report.city}`);
+    if (report.totalAmountFormatted) lines.push(`${t.sum} ${report.totalAmountFormatted}`);
+    
+    if (report.aiSummary) {
+      lines.push(`${t.aiAnalysis} ${report.aiSummary}`);
+    }
+
+    return lines;
+  }, [report, t, rawStatus, orderStatus, dateText]);
+
+  const items: OrderItem[] = report?.items || [];
 
   return (
     <View style={styles.card}>
-      {/* Шапка картки */}
       <View style={styles.headerTop}>
-        <Text style={styles.orderIdText}>{headerTitle}</Text>
+        <Text style={styles.orderIdText} numberOfLines={1}>{headerTitle}</Text>
         <View style={styles.rightHeaderInfo}>
           {dateText ? <Text style={styles.dateText}>{dateText}</Text> : null}
           <View style={[styles.statusBadge, statusStep === 2 && styles.statusBadgeDone]}>
@@ -181,10 +213,9 @@ export default function AIReportView({ report, totalAmount }: AIReportViewProps)
 
       <View style={styles.locationContainer}>
         <Text style={styles.pinIcon}>📍</Text>
-        <Text style={styles.locationText}>{deliveryName}</Text>
+        <Text style={styles.locationText} numberOfLines={2}>{deliveryName}</Text>
       </View>
 
-      {/* Кнопка зміни статусу: локально переводить замовлення на наступний етап */}
       {nextStatus ? (
         <TouchableOpacity
           activeOpacity={0.7}
@@ -195,34 +226,47 @@ export default function AIReportView({ report, totalAmount }: AIReportViewProps)
         </TouchableOpacity>
       ) : null}
 
-      {/* Нижня панель зі словом «Сума:» та кнопкою */}
       <View style={styles.footerRow}>
-        <Text style={styles.orderSum}>{isRu ? 'Сумма: ' : 'Сума: '}<Text style={styles.priceValue}>{sumText}</Text></Text>
+        <Text style={styles.orderSum}>
+          {t.sum} <Text style={styles.priceValue}>{sumText}</Text>
+        </Text>
         <TouchableOpacity activeOpacity={0.7} onPress={toggleExpand} style={styles.toggleButton}>
           <Text style={styles.expandHint}>
-            {expanded ? (isRu ? '− Свернуть' : '− Згорнути') : (isRu ? '+ Детали заказа' : '+ Деталі замовлення')}
+            {expanded ? t.collapse : t.expand}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Розгорнуті деталі замовлення */}
       {expanded && (
         <View style={styles.bodyContainer}>
           <View style={styles.divider} />
-          <Text style={styles.sectionTitle}>{isRu ? '📋 Подробная информация заказа' : '📋 Детальна інформація замовлення'}</Text>
+          <Text style={styles.sectionTitle}>{t.detailsTitle}</Text>
+          
           {prettyDetailsLines.map((line, index) => (
-            <Text key={index} style={styles.detailLine}>{line}</Text>
+            <Text key={`line-${index}`} style={styles.detailLine}>{line}</Text>
           ))}
+
+          {items.length > 0 && (
+            <>
+              {/* Виправлено fontWeight з '750' на '700' */}
+              <Text style={[styles.detailLine, { fontWeight: '700', marginTop: 4 }]}>{t.itemsTitle}</Text>
+              {items.map((item, index) => (
+                <OrderItemRow key={`item-${item?.id || index}`} item={item} index={index} currency={report?.currency} />
+              ))}
+            </>
+          )}
         </View>
       )}
     </View>
   );
 }
 
+export default memo(AIReportView);
+
 const styles = StyleSheet.create({
   card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, marginTop: 12, borderWidth: 1, borderColor: '#e5e5ea', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  orderIdText: { fontSize: 13, fontWeight: '700', color: '#007aff' },
+  orderIdText: { fontSize: 13, fontWeight: '700', color: '#007aff', flex: 1, marginRight: 8 },
   rightHeaderInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dateText: { fontSize: 11, color: '#8e8e93', fontWeight: '500' },
   statusBadge: { backgroundColor: '#fff0f0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
@@ -234,7 +278,7 @@ const styles = StyleSheet.create({
   clientName: { fontSize: 18, fontWeight: '700', color: '#1c1c1e', marginBottom: 2 },
   phoneText: { fontSize: 14, color: '#8e8e93', fontWeight: '500', marginBottom: 6 },
   locationContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  pinIcon: { fontSize: 13, marginRight: 4 },
+  pinIcon: { fontSize: 13, marginRight: 4, alignSelf: 'flex-start' },
   locationText: { fontSize: 13, color: '#3a3a3c', fontWeight: '500', flex: 1 },
   footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f2f2f7' },
   orderSum: { fontSize: 14, fontWeight: '600', color: '#8e8e93' },
