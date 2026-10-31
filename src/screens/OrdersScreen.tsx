@@ -117,37 +117,10 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#f5f5f7' 
-  },
-  centered: { 
-    flex: 1, 
-    backgroundColor: '#f5f5f7', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    padding: 20
-  },
-  loadingText: { 
-    marginTop: 12, 
-    fontSize: 14, 
-    color: '#8e8e93', 
-    textAlign: 'center' 
-  },
-  listContainer: { 
-    padding: 16,
-    flexGrow: 1
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60
-  },
-  emptyText: { 
-    fontSize: 15, 
-    color: '#8e8e93', 
-    textAlign: 'center',
-    fontWeight: '500'
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f7' },
+  centered: { flex: 1, backgroundColor: '#f5f5f7', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  loadingText: { marginTop: 12, fontSize: 14, color: '#8e8e93', textAlign: 'center' },
+  listContainer: { padding: 16, flexGrow: 1 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyText: { fontSize: 15, color: '#8e8e93', textAlign: 'center', fontWeight: '500' },
 });

@@ -1,17 +1,17 @@
 import React, { useState, useMemo, useCallback, memo } from 'react';
 import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import { Order, OrderItem } from '../types/order';
+import AIChatLogView from './AIChatLogView';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 interface AIReportViewProps {
-  report: Order;
-  totalAmount?: number | string | null;
+  readonly report?: Order | null;
+  readonly totalAmount?: number | string | null;
 }
 
-// Мовні словники
 const DICTIONARY = {
   uk: {
     noClient: 'Клієнт не вказано',
@@ -29,7 +29,6 @@ const DICTIONARY = {
     city: '🏙 Місто:',
     sum: '💳 Сума:',
     itemsTitle: '🛍 Товари у замовленні:',
-    aiAnalysis: '🤖 Аналіз:',
     detailsTitle: '📋 Детальна інформація замовлення',
     collapse: '− Згорнути',
     expand: '+ Деталі замовлення',
@@ -53,7 +52,6 @@ const DICTIONARY = {
     city: '🏙 Город:',
     sum: '💳 Сумма:',
     itemsTitle: '🛍 Товары в заказе:',
-    aiAnalysis: '🤖 Анализ:',
     detailsTitle: '📋 Подробная информация заказа',
     collapse: '− Свернуть',
     expand: '+ Детали заказа',
@@ -61,25 +59,36 @@ const DICTIONARY = {
     complete: 'Выполнено',
     currencyUah: 'грн'
   }
+} as const;
+
+const sanitizeText = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
 };
 
-const isRussianLanguage = (input: Order): boolean => {
+const isRussianLanguage = (input?: Order | null): boolean => {
+  if (!input) return false;
+  const rawAny = input as any;
   const textFields = [
-    input?.shopName,
-    input?.customerName,
-    input?.status,
-    input?.deliveryMethod,
-    input?.deliveryAddress,
-    input?.aiSummary
-  ].filter(Boolean).join(' ');
+    sanitizeText(input.shopName),
+    sanitizeText(input.customerName),
+    sanitizeText(input.status),
+    sanitizeText(input.deliveryMethod),
+    sanitizeText(input.deliveryAddress),
+    sanitizeText(input.aiSummary),
+    sanitizeText(rawAny.chat_summary)
+  ].join(' ');
 
   if (!textFields) return false;
   return /[ыэъё]|обработке|новый|выполнен|отменен/i.test(textFields);
 };
 
-const getLocalizedStatus = (status: string, isRu: boolean): string => {
-  if (!status) return isRu ? 'НОВЫЙ' : 'НОВИЙ';
-  const lower = status.toLowerCase();
+const getLocalizedStatus = (status?: string, isRu: boolean = false): string => {
+  const cleanStatus = sanitizeText(status);
+  if (!cleanStatus) return isRu ? 'НОВЫЙ' : 'НОВИЙ';
+  const lower = cleanStatus.toLowerCase();
   
   if (lower.includes('pending') || lower === 'new' || lower.includes('новий') || lower.includes('новый')) {
     return isRu ? 'НОВЫЙ' : 'НОВИЙ';
@@ -96,33 +105,36 @@ const getLocalizedStatus = (status: string, isRu: boolean): string => {
   if (lower.includes('cancelled') || lower.includes('скасовано') || lower.includes('отменен')) {
     return isRu ? 'ОТМЕНЕН' : 'СКАСОВАНО';
   }
-  return status.toUpperCase();
+  return cleanStatus.toUpperCase();
 };
 
-const getStatusStep = (status: string): number => {
-  if (!status) return 0;
-  const lower = status.toLowerCase();
-  if (lower.includes('cancel') || lower.includes('скасов') || lower.includes('отмен')) return -1;
-  if (lower.includes('completed') || lower.includes('fulfilled') || lower.includes('виконано') || lower.includes('выполнен')) return 2;
-  if (lower.includes('shipped') || lower.includes('відправлено') || lower.includes('отправлен')) return 1;
+const getStatusStep = (status?: string): number => {
+  const cleanStatus = sanitizeText(status).toLowerCase();
+  if (!cleanStatus) return 0;
+  if (cleanStatus.includes('cancel') || cleanStatus.includes('скасов') || cleanStatus.includes('отмен')) return -1;
+  if (cleanStatus.includes('completed') || cleanStatus.includes('fulfilled') || cleanStatus.includes('виконано') || cleanStatus.includes('выполнен')) return 2;
+  if (cleanStatus.includes('shipped') || cleanStatus.includes('відправлено') || cleanStatus.includes('отправлен')) return 1;
   return 0;
 };
 
-const OrderItemRow = memo(({ item, index, currency }: { item: OrderItem; index: number; currency?: string }) => {
-  const currencyLabel = currency === 'UAH' ? 'грн' : currency || 'UAH';
-  const uPrice = item?.price ?? 0;
-  const q = item?.quantity ?? 1;
+const OrderItemRow = memo(({ item, index, currency }: { readonly item: OrderItem; readonly index: number; readonly currency?: string }) => {
+  const currencyLabel = sanitizeText(currency) === 'UAH' ? 'грн' : sanitizeText(currency) || 'UAH';
+  const uPrice = typeof item?.price === 'number' ? item.price : 0;
+  const q = typeof item?.quantity === 'number' ? item.quantity : 1;
   const calcTotal = uPrice * q;
 
-  const itemTotal = item?.lineTotalFormatted || `${calcTotal.toFixed(2)} ${currencyLabel}`;
-  const unitPrice = item?.priceFormatted || `${uPrice.toFixed(2)} ${currencyLabel}`;
+  const itemTotal = sanitizeText(item?.lineTotalFormatted) || `${calcTotal.toFixed(2)} ${currencyLabel}`;
+  const unitPrice = sanitizeText(item?.priceFormatted) || `${uPrice.toFixed(2)} ${currencyLabel}`;
+  const itemName = sanitizeText(item?.name) || 'Товар';
 
   return (
     <Text style={styles.detailLine}>
-      {`  • ${index + 1}. ${item?.name || 'Товар'} — ${q} шт. × ${unitPrice} = ${itemTotal}`}
+      {`  • ${index + 1}. ${itemName} — ${q} шт. × ${unitPrice} = ${itemTotal}`}
     </Text>
   );
 });
+
+OrderItemRow.displayName = 'OrderItemRow';
 
 function AIReportView({ report, totalAmount }: AIReportViewProps) {
   const [expanded, setExpanded] = useState<boolean>(false);
@@ -136,65 +148,94 @@ function AIReportView({ report, totalAmount }: AIReportViewProps) {
   const isRu = useMemo(() => isRussianLanguage(report), [report]);
   const t = DICTIONARY[isRu ? 'ru' : 'uk'];
 
-  const rawStatus = statusOverride ?? (report?.status || 'new');
+  const rawStatus = statusOverride || sanitizeText(report?.status) || 'new';
   const statusStep = useMemo(() => getStatusStep(rawStatus), [rawStatus]);
   const orderStatus = useMemo(() => getLocalizedStatus(rawStatus, isRu), [rawStatus, isRu]);
 
-  const clientName = report?.customerName || t.noClient;
-  const phone = report?.phone || t.noPhone;
-  const headerTitle = useMemo(() => [report?.shopName, report?.orderNumber || report?.id].filter(Boolean).join(' #'), [report]);
+  const clientName = sanitizeText(report?.customerName) || t.noClient;
+  const phone = sanitizeText(report?.phone) || t.noPhone;
+  
+  const headerTitle = useMemo(() => {
+    const shop = sanitizeText(report?.shopName);
+    const orderNum = sanitizeText(report?.orderNumber) || sanitizeText(report?.id);
+    return [shop, orderNum].filter(Boolean).join(' #');
+  }, [report?.shopName, report?.orderNumber, report?.id]);
 
   const nextStatus = statusStep === 0 ? 'shipped' : statusStep === 1 ? 'completed' : null;
   const actionLabel = statusStep === 0 ? t.process : t.complete;
 
   const dateText = useMemo(() => {
-    if (!report?.createdAt) return '';
-    const parsedDate = new Date(report.createdAt);
+    const rawDate = report?.createdAt;
+    if (!rawDate) return '';
+    const parsedDate = new Date(rawDate);
     if (Number.isNaN(parsedDate.getTime())) return '';
     return parsedDate.toLocaleString(isRu ? 'ru-RU' : 'uk-UA', { 
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
     });
   }, [report?.createdAt, isRu]);
 
-  const sumText = useMemo(() => {
-    const amountValue = totalAmount ?? report?.totalAmount;
-    const formattedAmount = typeof amountValue === 'number' ? amountValue.toFixed(2) : amountValue;
-    return report?.totalAmountFormatted || `${formattedAmount} ${report?.currency === 'UAH' ? t.currencyUah : report?.currency || t.currencyUah}`;
-  }, [totalAmount, report?.totalAmount, report?.totalAmountFormatted, report?.currency, t.currencyUah]);
-
-  const deliveryName = report?.deliveryAddress || t.noAddress;
+  const deliveryName = sanitizeText(report?.deliveryAddress) || t.noAddress;
 
   const prettyDetailsLines = useMemo(() => {
     if (!report) return [t.noDetails];
     
     const lines: string[] = [];
+    const shop = sanitizeText(report.shopName);
+    if (shop) lines.push(`${t.shop} ${shop}`);
     
-    if (report.shopName) lines.push(`${t.shop} ${report.shopName}`);
-    
-    const orderNum = report.orderNumber || report.id;
+    const orderNum = sanitizeText(report.orderNumber) || sanitizeText(report.id);
     if (orderNum) lines.push(`${t.orderNum} ${orderNum}`);
     
     if (rawStatus) lines.push(`${t.status} ${orderStatus}`);
-    
     if (dateText) lines.push(`${t.date} ${dateText}`);
     
-    if (report.customerName) lines.push(`${t.client} ${report.customerName}`);
-    if (report.phone) lines.push(`📞 ${report.phone}`);
-    if (report.email) lines.push(`📧 ${report.email}`);
-    if (report.deliveryMethod) lines.push(`${t.deliveryMethod} ${report.deliveryMethod}`);
-    if (report.deliveryAddress) lines.push(`${t.deliveryAddress} ${report.deliveryAddress}`);
-    if (report.country) lines.push(`${t.country} ${report.country}`);
-    if (report.city) lines.push(`${t.city} ${report.city}`);
-    if (report.totalAmountFormatted) lines.push(`${t.sum} ${report.totalAmountFormatted}`);
+    const customer = sanitizeText(report.customerName);
+    if (customer) lines.push(`${t.client} ${customer}`);
     
-    if (report.aiSummary) {
-      lines.push(`${t.aiAnalysis} ${report.aiSummary}`);
-    }
+    const clientPhone = sanitizeText(report.phone);
+    if (clientPhone) lines.push(`📞 ${clientPhone}`);
+    
+    const email = sanitizeText(report.email);
+    if (email) lines.push(`📧 ${email}`);
+    
+    const deliveryMethod = sanitizeText(report.deliveryMethod);
+    if (deliveryMethod) lines.push(`${t.deliveryMethod} ${deliveryMethod}`);
+    
+    if (report.deliveryAddress) lines.push(`${t.deliveryAddress} ${sanitizeText(report.deliveryAddress)}`);
+    
+    const country = sanitizeText(report.country);
+    if (country) lines.push(`${t.country} ${country}`);
+    
+    const city = sanitizeText(report.city);
+    if (city) lines.push(`${t.city} ${city}`);
+    
+    const amountFormatted = sanitizeText(report.totalAmountFormatted);
+    if (amountFormatted) lines.push(`${t.sum} ${amountFormatted}`);
 
     return lines;
   }, [report, t, rawStatus, orderStatus, dateText]);
 
-  const items: OrderItem[] = report?.items || [];
+  const reportAny = report as any;
+  const aiSummaryText = sanitizeText(report?.aiSummary);
+  const chatSummaryText = sanitizeText(reportAny?.chat_summary);
+
+  const items: OrderItem[] = useMemo(() => Array.isArray(report?.items) ? report.items : [], [report?.items]);
+
+  const finalSumText = useMemo(() => {
+    const rawVal = totalAmount ?? report?.totalAmount;
+    const formatted = sanitizeText(report?.totalAmountFormatted);
+    const curr = sanitizeText(report?.currency) === 'UAH' ? t.currencyUah : sanitizeText(report?.currency) || t.currencyUah;
+
+    if (formatted) return formatted;
+    if (typeof rawVal === 'number') {
+      return `${rawVal.toFixed(2)} ${curr}`;
+    }
+    return `${sanitizeText(rawVal) || '0.00'} ${curr}`;
+  }, [totalAmount, report?.totalAmount, report?.totalAmountFormatted, report?.currency, t.currencyUah]);
+
+  const handleStatusPress = useCallback(() => {
+    if (nextStatus) setStatusOverride(nextStatus);
+  }, [nextStatus]);
 
   return (
     <View style={styles.card}>
@@ -219,7 +260,7 @@ function AIReportView({ report, totalAmount }: AIReportViewProps) {
       {nextStatus ? (
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => setStatusOverride(nextStatus)}
+          onPress={handleStatusPress}
           style={styles.actionButton}
         >
           <Text style={styles.actionButtonText}>{actionLabel}</Text>
@@ -228,7 +269,7 @@ function AIReportView({ report, totalAmount }: AIReportViewProps) {
 
       <View style={styles.footerRow}>
         <Text style={styles.orderSum}>
-          {t.sum} <Text style={styles.priceValue}>{sumText}</Text>
+          {t.sum} <Text style={styles.priceValue}>{finalSumText}</Text>
         </Text>
         <TouchableOpacity activeOpacity={0.7} onPress={toggleExpand} style={styles.toggleButton}>
           <Text style={styles.expandHint}>
@@ -246,10 +287,12 @@ function AIReportView({ report, totalAmount }: AIReportViewProps) {
             <Text key={`line-${index}`} style={styles.detailLine}>{line}</Text>
           ))}
 
+          {/* Інтегрований блок аналізу та чату від Claude ШІ */}
+          <AIChatLogView aiSummary={aiSummaryText} chatSummary={chatSummaryText} />
+
           {items.length > 0 && (
             <>
-              {/* Виправлено fontWeight з '750' на '700' */}
-              <Text style={[styles.detailLine, { fontWeight: '700', marginTop: 4 }]}>{t.itemsTitle}</Text>
+              <Text style={[styles.detailLine, { fontWeight: '700', marginTop: 10 }]}>{t.itemsTitle}</Text>
               {items.map((item, index) => (
                 <OrderItemRow key={`item-${item?.id || index}`} item={item} index={index} currency={report?.currency} />
               ))}
