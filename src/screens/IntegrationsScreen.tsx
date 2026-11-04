@@ -9,9 +9,13 @@ import {
   SafeAreaView, 
   StatusBar, 
   ScrollView, 
-  ActivityIndicator 
+  ActivityIndicator,
+  Platform 
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { createMMKV } from 'react-native-mmkv';
+import { useAppTheme } from '../theme/ThemeContext';
+import { AuraHeader } from '../components/AuraHeader';
 
 const storage = createMMKV();
 export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
@@ -34,8 +38,10 @@ interface ShopCardProps {
   onDelete: (id: string) => void;
 }
 
-// Повністю оптимізована мемоізована картка магазину
+// Оптимізована мемоізована картка магазину у стилі темного скла
 const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardProps) => {
+  const { theme } = useAppTheme();
+
   const maskedToken = useMemo(() => {
     return '•'.repeat(Math.min(shop.token.length, 20));
   }, [shop.token]);
@@ -49,27 +55,27 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
   }, [onDelete, shop.id]);
 
   return (
-    <View style={styles.shopCard}>
+    <View style={[styles.shopCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
       <View style={styles.shopInfo}>
-        <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
-        <Text style={styles.shopToken} numberOfLines={1}>
+        <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>{shop.name}</Text>
+        <Text style={[styles.shopToken, { color: theme.textSecondary }]} numberOfLines={1}>
           Токен: {isVisible ? shop.token : maskedToken}
         </Text>
       </View>
 
       <View style={styles.cardActions}>
         <TouchableOpacity
-          style={styles.actionButton}
+          style={[styles.actionButton, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
           onPress={handlePressToggle}
           activeOpacity={0.7}
         >
-          <Text style={styles.actionButtonText}>
+          <Text style={[styles.actionButtonText, { color: theme.primary }]}>
             {isVisible ? 'Сховати' : 'Показати'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
+          style={[styles.actionButton, styles.deleteButton, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.3)' }]}
           onPress={handlePressDelete}
           activeOpacity={0.7}
         >
@@ -83,6 +89,9 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
 ShopCard.displayName = 'ShopCard';
 
 export default function IntegrationsScreen() {
+  const { theme } = useAppTheme();
+  const navigation = useNavigation<any>();
+
   const [shopName, setShopName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [shops, setShops] = useState<ShopIntegration[]>([]);
@@ -181,7 +190,7 @@ export default function IntegrationsScreen() {
 
     return (
       <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>Підключені магазини ({shops.length})</Text>
+        <Text style={[styles.listTitle, { color: theme.textPrimary }]}>Підключені магазини ({shops.length})</Text>
         {shops.map((shop) => (
           <ShopCard
             key={shop.id}
@@ -193,93 +202,160 @@ export default function IntegrationsScreen() {
         ))}
       </View>
     );
-  }, [shops, showTokens, toggleShowToken, handleDelete]);
+  }, [shops, showTokens, toggleShowToken, handleDelete, theme]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f7" />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Підключення магазинів</Text>
-        <Text style={styles.subtitle}>Додайте назву та API-токен вашого маркетплейса для синхронізації через ШІ.</Text>
+    <View style={[styles.container, { backgroundColor: theme.bgDark }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+      
+      {/* Розкішний фоновий градієнт із променями */}
+      <AuraHeader />
 
-        <Text style={styles.label}>Назва магазину</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Наприклад: my-store або my-store.myshopify.com"
-          placeholderTextColor="#8e8e93"
-          value={shopName}
-          onChangeText={setShopName}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+      {/* Наш власний преміальний TopBar із кнопкою меню ☰ */}
+      <View style={styles.topBar}>
+        <TouchableOpacity 
+          style={[styles.menuBtn, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
+          onPress={() => navigation.openDrawer()}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.menuIcon, { color: theme.textPrimary }]}>☰</Text>
+        </TouchableOpacity>
+        <View>
+          <Text style={[styles.topBarTitle, { color: theme.textPrimary }]}>🔗 Інтеграції та Магазини</Text>
+          <Text style={[styles.topBarSub, { color: theme.textSecondary }]}>Синхронізація маркетплейсів через ШІ</Text>
+        </View>
+      </View>
 
-        <Text style={styles.label}>API-токен (Ключ доступу)</Text>
-        <View style={styles.passwordContainer}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={[styles.formCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>Підключення магазину</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Введіть назву та API-токен вашої платформи для безперебійного зв'язку з агентами.</Text>
+
+          <Text style={[styles.label, { color: theme.textPrimary }]}>Назва магазину</Text>
           <TextInput
-            style={styles.passwordInput}
-            placeholder="Введіть ваш токен..."
-            placeholderTextColor="#8e8e93"
-            secureTextEntry={!isApiKeyVisible}
-            value={apiKey}
-            onChangeText={setApiKey}
+            style={[styles.input, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textPrimary }]}
+            placeholder="Наприклад: my-store або my-store.myshopify.com"
+            placeholderTextColor={theme.textSecondary}
+            value={shopName}
+            onChangeText={setShopName}
             autoCapitalize="none"
             autoCorrect={false}
           />
+
+          <Text style={[styles.label, { color: theme.textPrimary }]}>API-токен (Ключ доступу)</Text>
+          <View style={[styles.passwordContainer, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
+            <TextInput
+              style={[styles.passwordInput, { color: theme.textPrimary }]}
+              placeholder="Введіть ваш токен..."
+              placeholderTextColor={theme.textSecondary}
+              secureTextEntry={!isApiKeyVisible}
+              value={apiKey}
+              onChangeText={setApiKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity 
+              style={styles.eyeButton} 
+              onPress={toggleApiKeyVisibility}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.eyeButtonText, { color: theme.primary }]}>
+                {isApiKeyVisible ? 'Сховати' : 'Показати'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity 
-            style={styles.eyeButton} 
-            onPress={toggleApiKeyVisibility}
-            activeOpacity={0.7}
+            style={[styles.saveButton, { backgroundColor: theme.primary }, isSaving && styles.saveButtonDisabled]} 
+            onPress={handleSave}
+            disabled={isSaving}
+            activeOpacity={0.8}
           >
-            <Text style={styles.eyeButtonText}>
-              {isApiKeyVisible ? 'Сховати' : 'Показати'}
-            </Text>
+            {isSaving ? (
+              <ActivityIndicator color={theme.bgDark} size="small" />
+            ) : (
+              <Text style={[styles.saveButtonText, { color: theme.bgDark }]}>Зберегти інтеграцію</Text>
+            )}
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
-          onPress={handleSave}
-          disabled={isSaving}
-          activeOpacity={0.8}
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Text style={styles.saveButtonText}>Зберегти інтеграцію</Text>
-          )}
-        </TouchableOpacity>
-
         {renderedShopsList}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f7' },
-  content: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 6 },
-  subtitle: { fontSize: 14, color: '#8e8e93', marginBottom: 20, lineHeight: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#3a3a3c', marginBottom: 6 },
-  input: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#1c1c1e', marginBottom: 16 },
+  container: { flex: 1 },
   
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea', borderRadius: 12, marginBottom: 16 },
-  passwordInput: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#1c1c1e' },
-  eyeButton: { paddingHorizontal: 14, paddingVertical: 10 },
-  eyeButtonText: { fontSize: 14, fontWeight: '600', color: '#007aff' },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 45,
+    paddingBottom: 12,
+    zIndex: 10,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    marginRight: 12,
+  },
+  menuIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  topBarTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  topBarSub: {
+    fontSize: 11,
+  },
 
-  saveButton: { backgroundColor: '#007aff', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 24, shadowColor: '#007aff', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  content: { padding: 12, paddingBottom: 40, zIndex: 1 },
+  
+  formCard: {
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 6,
+  },
+  title: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  subtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 14 },
+  
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, marginBottom: 18 },
+  passwordInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
+  eyeButton: { paddingHorizontal: 14, paddingVertical: 10 },
+  eyeButtonText: { fontSize: 13, fontWeight: '700' },
+
+  saveButton: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
   saveButtonDisabled: { opacity: 0.7 },
-  saveButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  listContainer: { marginTop: 10 },
-  listTitle: { fontSize: 18, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 12 },
-  shopCard: { backgroundColor: '#ffffff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e5e5ea', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  shopInfo: { marginBottom: 12 },
-  shopName: { fontSize: 16, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 4 },
-  shopToken: { fontSize: 14, color: '#8e8e93', fontFamily: 'monospace' },
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
-  actionButton: { backgroundColor: '#f2f2f7', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  actionButtonText: { fontSize: 13, fontWeight: '600', color: '#007aff' },
-  deleteButton: { backgroundColor: '#ffe5e5' },
-  deleteButtonText: { fontSize: 13, fontWeight: '600', color: '#ff3b30' },
+  saveButtonText: { fontSize: 15, fontWeight: '800' },
+  
+  listContainer: { marginTop: 4 },
+  listTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 10, marginLeft: 4 },
+  
+  shopCard: { borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  shopInfo: { marginBottom: 10 },
+  shopName: { fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
+  shopToken: { fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  
+  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  actionButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  actionButtonText: { fontSize: 12, fontWeight: '700' },
+  deleteButton: { borderWidth: 1 },
+  deleteButtonText: { fontSize: 12, fontWeight: '700', color: '#ff3b30' },
 });

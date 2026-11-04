@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Platform, StatusBar, ActivityIndicator } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useAppTheme } from '../theme/ThemeContext';
+import { AuraHeader } from '../components/AuraHeader';
 
 interface SupportTicket {
   id: string;
@@ -9,12 +12,15 @@ interface SupportTicket {
   message: string;
   aiSuggestedSolution: string;
   riskLevel?: string;
-  status: 'incoming' | 'active' | 'archive' | 'rejected';
+  status: 'incoming' | 'archive' | 'rejected';
   date: string;
 }
 
-export default function SupportScreen({ navigation }: { navigation: any }) {
-  const [activeTab, setActiveTab] = useState<'incoming' | 'active' | 'archive' | 'rejected'>('incoming');
+export default function SupportScreen() {
+  const { theme } = useAppTheme();
+  const navigation = useNavigation<any>();
+
+  const [activeTab, setActiveTab] = useState<'incoming' | 'archive' | 'rejected'>('incoming');
   const [isLoading, setIsLoading] = useState(false);
 
   const [tickets, setTickets] = useState<SupportTicket[]>([
@@ -31,11 +37,10 @@ export default function SupportScreen({ navigation }: { navigation: any }) {
     },
   ]);
 
-  // Функція автоматичного сканування магазину та аналізу скарг (як на інших екранах)
+  // Функція автоматичного сканування магазину та аналізу скарг
   const runAiSupportAnalysis = async () => {
     setIsLoading(true);
     try {
-      // Виклик твого бекенд-ендпоїнта (заміни IP на свій актуальний або localhost/домен)
       const response = await fetch('http://10.0.2.2:5000/api/support', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,7 +57,6 @@ export default function SupportScreen({ navigation }: { navigation: any }) {
       if (data.success && data.support_report) {
         const report = data.support_report;
         
-        // Створюємо новий тікет на основі відповіді Агента 3
         const newTicket: SupportTicket = {
           id: `ticket-${Date.now()}`,
           orderNumber: '#2005',
@@ -66,19 +70,19 @@ export default function SupportScreen({ navigation }: { navigation: any }) {
         };
 
         setTickets(prev => [newTicket, ...prev]);
-        Alert.alert("Успіх", "ШІ успішно просканував магазин та оновив список претензій!");
+        Alert.alert("Успіх ✅", "ШІ успішно просканував магазин та оновив список претензій!");
       } else {
-        Alert.alert("Помилка", data.error || "Не вдалося отримати дані від ШІ.");
+        Alert.alert("Помилка ❌", data.error || "Не вдалося отримати дані від ШІ.");
       }
     } catch (error) {
       console.error("AI Support Error:", error);
-      Alert.alert("Помилка мережі", "Не вдалося з'єднатися з бекендом підтримки.");
+      Alert.alert("Помилка мережі ❌", "Не вдалося з'єднатися з бекендом підтримки.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const moveTicket = (id: string, newStatus: 'incoming' | 'active' | 'archive' | 'rejected') => {
+  const moveTicket = (id: string, newStatus: 'incoming' | 'archive' | 'rejected') => {
     setTickets(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
   };
 
@@ -89,6 +93,7 @@ export default function SupportScreen({ navigation }: { navigation: any }) {
     ]);
   };
 
+  // Прямий перехід у міні-CRM чат із завантаженими даними клієнта
   const openChatWithClient = (ticket: SupportTicket) => {
     navigation.navigate('AIChat', { 
       orderNumber: ticket.orderNumber, 
@@ -100,109 +105,112 @@ export default function SupportScreen({ navigation }: { navigation: any }) {
   const filteredTickets = tickets.filter(t => t.status === activeTab);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Верхня панель */}
+    <View style={[styles.container, { backgroundColor: theme.bgDark }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+      
+      {/* Розкішний фоновий градієнт із променями */}
+      <AuraHeader />
+
+      {/* Наш власний преміальний TopBar із кнопкою меню ☰ та кнопкою AI-сканування */}
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.menuBtn} onPress={() => navigation.openDrawer()}>
-          <Text style={styles.menuIcon}>☰</Text>
+        <TouchableOpacity 
+          style={[styles.menuBtn, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]} 
+          onPress={() => navigation.openDrawer()}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.menuIcon, { color: theme.textPrimary }]}>☰</Text>
         </TouchableOpacity>
+        
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>⚠️ Підтримка та повернення</Text>
-          <Text style={styles.headerSub}>Управління претензіями клієнтів</Text>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>⚠️ Підтримка та повернення</Text>
+          <Text style={[styles.headerSub, { color: theme.textSecondary }]}>Управління претензіями клієнтів</Text>
         </View>
 
-        {/* Кнопка запуску AI-аналізу скарг */}
         <TouchableOpacity 
-          style={styles.aiScanButton} 
+          style={[styles.aiScanButton, { backgroundColor: theme.primary }]} 
           onPress={runAiSupportAnalysis}
           disabled={isLoading}
+          activeOpacity={0.8}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={theme.bgDark} />
           ) : (
-            <Text style={styles.aiScanButtonText}>🤖 Сканувати</Text>
+            <Text style={[styles.aiScanButtonText, { color: theme.bgDark }]}>🤖 Сканувати</Text>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* Меню вкладок */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'incoming' && styles.activeTab]} onPress={() => setActiveTab('incoming')}>
-          <Text style={[styles.tabText, activeTab === 'incoming' && styles.activeTabText]}>Вхідні</Text>
+      {/* Меню вкладок у стилі темного скла */}
+      <View style={[styles.tabContainer, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'incoming' && { backgroundColor: theme.primary, borderColor: theme.primary }]} 
+          onPress={() => setActiveTab('incoming')}
+        >
+          <Text style={[styles.tabText, { color: theme.textSecondary }, activeTab === 'incoming' && { color: theme.bgDark, fontWeight: '800' }]}>Вхідні</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'active' && styles.activeTab]} onPress={() => setActiveTab('active')}>
-          <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>Активні</Text>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'archive' && { backgroundColor: theme.primary, borderColor: theme.primary }]} 
+          onPress={() => setActiveTab('archive')}
+        >
+          <Text style={[styles.tabText, { color: theme.textSecondary }, activeTab === 'archive' && { color: theme.bgDark, fontWeight: '800' }]}>Архів</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'archive' && styles.activeTab]} onPress={() => setActiveTab('archive')}>
-          <Text style={[styles.tabText, activeTab === 'archive' && styles.activeTabText]}>Архів</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'rejected' && styles.activeTab]} onPress={() => setActiveTab('rejected')}>
-          <Text style={[styles.tabText, activeTab === 'rejected' && styles.activeTabText]}>Відхилені</Text>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'rejected' && { backgroundColor: theme.primary, borderColor: theme.primary }]} 
+          onPress={() => setActiveTab('rejected')}
+        >
+          <Text style={[styles.tabText, { color: theme.textSecondary }, activeTab === 'rejected' && { color: theme.bgDark, fontWeight: '800' }]}>Відхилені</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {filteredTickets.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>У цій категорії поки немає запитів</Text>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>У цій категорії поки немає запитів 📭</Text>
           </View>
         ) : (
           filteredTickets.map((item) => (
-            <View key={item.id} style={styles.card}>
+            <View key={item.id} style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
               <View style={styles.cardHeader}>
-                <Text style={styles.orderNumber}>Замовлення {item.orderNumber}</Text>
+                <Text style={[styles.orderNumber, { color: theme.primary }]}>Замовлення {item.orderNumber}</Text>
                 {item.riskLevel && (
                   <View style={[styles.riskBadge, item.riskLevel === 'HIGH' ? styles.riskHigh : styles.riskLow]}>
                     <Text style={styles.riskText}>РИЗИК: {item.riskLevel}</Text>
                   </View>
                 )}
-                <Text style={styles.dateText}>{item.date}</Text>
+                <Text style={[styles.dateText, { color: theme.textSecondary }]}>{item.date}</Text>
               </View>
 
-              <Text style={styles.clientInfo}>Клієнт: {item.clientName}</Text>
+              <Text style={[styles.clientInfo, { color: theme.textPrimary }]}>Клієнт: {item.clientName}</Text>
 
-              <TouchableOpacity style={styles.chatLinkBtn} onPress={() => openChatWithClient(item)}>
-                <Text style={styles.chatLinkText}>💬 Відкрити діалог з клієнтом</Text>
+              {/* Головна кнопка переходу в чат з клієнтом */}
+              <TouchableOpacity style={[styles.goToChatButton, { backgroundColor: theme.primary }]} onPress={() => openChatWithClient(item)} activeOpacity={0.8}>
+                <Text style={[styles.goToChatButtonText, { color: theme.bgDark }]}>💬 Перейти в чат з клієнтом</Text>
               </TouchableOpacity>
 
-              <View style={styles.messageBox}>
-                <Text style={styles.messageTitle}>Претензія:</Text>
-                <Text style={styles.messageText}>"{item.message}"</Text>
+              <View style={[styles.messageBox, { backgroundColor: 'rgba(255,255,255,0.05)', borderLeftColor: '#ff3b30' }]}>
+                <Text style={[styles.messageTitle, { color: theme.textPrimary }]}>Претензія:</Text>
+                <Text style={[styles.messageText, { color: theme.textSecondary }]}>"{item.message}"</Text>
               </View>
 
-              <View style={styles.aiBox}>
-                <Text style={styles.aiTitle}>🤖 Аналіз ШІ (Агент 3):</Text>
-                <Text style={styles.aiText}>{item.aiSuggestedSolution}</Text>
+              <View style={[styles.aiBox, { backgroundColor: 'rgba(0, 122, 255, 0.1)', borderLeftColor: theme.primary }]}>
+                <Text style={[styles.aiTitle, { color: theme.primary }]}>🤖 Аналіз ШІ (Агент 3):</Text>
+                <Text style={[styles.aiText, { color: theme.textPrimary }]}>{item.aiSuggestedSolution}</Text>
               </View>
 
               <View style={styles.actionRow}>
                 {item.status === 'incoming' && (
                   <>
-                    <TouchableOpacity style={styles.btnPrimary} onPress={() => moveTicket(item.id, 'active')}>
-                      <Text style={styles.btnText}>В активні</Text>
+                    <TouchableOpacity style={[styles.btnSuccess, { backgroundColor: '#34c759' }]} onPress={() => moveTicket(item.id, 'archive')} activeOpacity={0.8}>
+                      <Text style={styles.btnText}>В архів (Вирішено)</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.btnSuccess} onPress={() => moveTicket(item.id, 'archive')}>
-                      <Text style={styles.btnText}>В архів</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.btnDanger} onPress={() => moveTicket(item.id, 'rejected')}>
-                      <Text style={styles.btnText}>Відхилити</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                {item.status === 'active' && (
-                  <>
-                    <TouchableOpacity style={styles.btnSuccess} onPress={() => moveTicket(item.id, 'archive')}>
-                      <Text style={styles.btnText}>Вирішено (Архів)</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.btnDanger} onPress={() => moveTicket(item.id, 'rejected')}>
+                    <TouchableOpacity style={[styles.btnDanger, { backgroundColor: '#ff3b30' }]} onPress={() => moveTicket(item.id, 'rejected')} activeOpacity={0.8}>
                       <Text style={styles.btnText}>Відхилити</Text>
                     </TouchableOpacity>
                   </>
                 )}
 
                 {(item.status === 'archive' || item.status === 'rejected') && (
-                  <TouchableOpacity style={styles.btnDelete} onPress={() => deleteTicket(item.id)}>
+                  <TouchableOpacity style={[styles.btnDelete, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.3)' }]} onPress={() => deleteTicket(item.id)} activeOpacity={0.8}>
                     <Text style={styles.btnDeleteText}>🗑️ Видалити назавжди</Text>
                   </TouchableOpacity>
                 )}
@@ -211,50 +219,103 @@ export default function SupportScreen({ navigation }: { navigation: any }) {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f7fa' },
-  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e5e5ea', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 10 },
-  menuBtn: { padding: 8, marginRight: 8 },
-  menuIcon: { fontSize: 22, fontWeight: 'bold', color: '#1c1c1e' },
+  container: { flex: 1 },
+  
+  topBar: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingTop: 45, 
+    paddingBottom: 12, 
+    zIndex: 10 
+  },
+  menuBtn: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 10, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    marginRight: 10 
+  },
+  menuIcon: { fontSize: 18, fontWeight: '700' },
   headerTextContainer: { flex: 1 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1a1a1a' },
-  headerSub: { fontSize: 11, color: '#666', marginTop: 1 },
-  aiScanButton: { backgroundColor: '#0052cc', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  aiScanButtonText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e5e5ea', paddingHorizontal: 8, elevation: 2 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: '#0052cc' },
-  tabText: { fontSize: 12, fontWeight: '600', color: '#666' },
-  activeTabText: { color: '#0052cc' },
-  scrollContent: { padding: 16 },
-  card: { backgroundColor: '#ffffff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#eef2f5', elevation: 2 },
+  headerTitle: { fontSize: 16, fontWeight: 'bold' },
+  headerSub: { fontSize: 11, marginTop: 1 },
+  
+  aiScanButton: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 10, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  aiScanButtonText: { fontSize: 11, fontWeight: '800' },
+  
+  tabContainer: { 
+    flexDirection: 'row', 
+    marginHorizontal: 12, 
+    borderRadius: 12, 
+    padding: 4, 
+    marginBottom: 12, 
+    borderWidth: 1,
+    gap: 4 
+  },
+  tab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: 'transparent' },
+  tabText: { fontSize: 12, fontWeight: '600' },
+  
+  scrollContent: { padding: 12, paddingBottom: 40, zIndex: 1 },
+  
+  card: { 
+    borderRadius: 18, 
+    padding: 16, 
+    marginBottom: 16, 
+    borderWidth: 1, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 15, 
+    elevation: 6 
+  },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  orderNumber: { fontSize: 16, fontWeight: 'bold', color: '#0052cc' },
-  riskBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  riskHigh: { backgroundColor: '#ffebe6' },
-  riskLow: { backgroundColor: '#e3fcef' },
-  riskText: { fontSize: 9, fontWeight: 'bold', color: '#de350b' },
-  dateText: { fontSize: 10, color: '#888' },
-  clientInfo: { fontSize: 14, fontWeight: '500', color: '#333', marginBottom: 8 },
-  chatLinkBtn: { backgroundColor: '#eef2ff', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#d0e1fd' },
-  chatLinkText: { color: '#0052cc', fontWeight: '600', fontSize: 12, textAlign: 'center' },
-  messageBox: { backgroundColor: '#fafbfc', padding: 10, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#de350b', marginBottom: 10 },
-  messageTitle: { fontSize: 12, fontWeight: 'bold', color: '#444' },
-  messageText: { fontSize: 13, color: '#333', fontStyle: 'italic', marginTop: 2 },
-  aiBox: { backgroundColor: '#f0f5ff', padding: 10, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#0052cc', marginBottom: 12 },
-  aiTitle: { fontSize: 12, fontWeight: 'bold', color: '#0052cc' },
-  aiText: { fontSize: 13, color: '#172b4d', marginTop: 2 },
-  actionRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  btnPrimary: { flex: 1, backgroundColor: '#0052cc', paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  btnSuccess: { flex: 1, backgroundColor: '#28a745', paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  btnDanger: { flex: 1, backgroundColor: '#dc3545', paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 11 },
-  btnDelete: { flex: 1, backgroundColor: '#f8d7da', paddingVertical: 8, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#f5c6cb' },
-  btnDeleteText: { color: '#721c24', fontWeight: '600', fontSize: 11 },
+  orderNumber: { fontSize: 15, fontWeight: 'bold' },
+  
+  riskBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  riskHigh: { backgroundColor: 'rgba(255, 59, 48, 0.2)' },
+  riskLow: { backgroundColor: 'rgba(52, 199, 89, 0.2)' },
+  riskText: { fontSize: 9, fontWeight: 'bold', color: '#ff3b30' },
+  
+  dateText: { fontSize: 10 },
+  clientInfo: { fontSize: 14, fontWeight: '600', marginBottom: 10 },
+  
+  goToChatButton: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, marginBottom: 12, alignItems: 'center' },
+  goToChatButtonText: { fontWeight: '700', fontSize: 13 },
+  
+  messageBox: { padding: 12, borderRadius: 10, borderLeftWidth: 3, marginBottom: 10 },
+  messageTitle: { fontSize: 12, fontWeight: 'bold' },
+  messageText: { fontSize: 13, fontStyle: 'italic', marginTop: 2 },
+  
+  aiBox: { padding: 12, borderRadius: 10, borderLeftWidth: 3, marginBottom: 12 },
+  aiTitle: { fontSize: 12, fontWeight: 'bold' },
+  aiText: { fontSize: 13, marginTop: 2, lineHeight: 18 },
+  
+  actionRow: { flexDirection: 'row', gap: 8 },
+  btnSuccess: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  btnDanger: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  
+  btnDelete: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
+  btnDeleteText: { fontWeight: '700', fontSize: 12, color: '#ff3b30' },
+  
   emptyBox: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#888', fontSize: 14 }
+  emptyText: { fontSize: 14, fontWeight: '500' }
 });

@@ -356,4 +356,34 @@ export class ApiService {
       aiSummary: report.aiSummary || text(asRecord(data.ai_report)?.ai_summary) || '',
     };
   }
+
+  // --- МЕТОД ДЛЯ АВТОМАТИЧНОГО ПОШТОВОГО ТРЕКІНГУ ---
+  static async trackParcel(trackingNumber: string, carrier: string = 'Нова Пошта'): Promise<{
+    success: boolean;
+    carrier?: string;
+    trackingNumber?: string;
+    status?: string;
+    warehouse?: string;
+    weight?: string;
+    backDeliverySum?: string;
+    timelineEvents?: string[];
+    error?: string;
+  }> {
+    return await request('/api/tracking', {
+      method: 'POST',
+      body: { trackingNumber, carrier },
+    });
+  }
+
+  // --- МЕТОД РЕЄСТРАЦІЇ PUSH-ТОКЕНА НА СЕРВЕРІ ---
+  static async registerPushToken(pushToken: string): Promise<void> {
+    try {
+      await request('/api/notifications/register', {
+        method: 'POST',
+        body: { push_token: pushToken },
+      });
+    } catch (error) {
+      console.warn('Не вдалося зареєструвати push-токен на сервері:', error);
+    }
+  }
 }

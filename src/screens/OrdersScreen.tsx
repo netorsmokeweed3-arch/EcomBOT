@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useMemo, memo, useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, FlatList, SafeAreaView, StatusBar, RefreshControl, Alert, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Order } from '../types/order';
 import { ApiService } from '../services/api';
 import AIReportView from '../components/AIReportView';
 import { orderStore } from '../services/orderStore';
+import { useAppTheme } from '../theme/ThemeContext';
+import { AuraHeader } from '../components/AuraHeader';
 
 interface OrderItemProps {
   item: Order;
@@ -11,6 +14,7 @@ interface OrderItemProps {
 }
 
 const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
+  const { theme } = useAppTheme();
   const [steps, setSteps] = useState({ step1: false, step2: false, step3: false });
   const [trackingNumber, setTrackingNumber] = useState(item?.trackingNumber || '');
   const [carrier, setCarrier] = useState(item?.carrier || 'Нова Пошта');
@@ -18,18 +22,36 @@ const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
   const [timelineEvents, setTimelineEvents] = useState<string[]>(
     item?.timelineEvents || ['📦 Замовлення створено в системі']
   );
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+
+  const handleFetchTracking = async (ttn: string, selectedCarrier: string) => {
+    if (!ttn || ttn.length < 5) return;
+    setIsTrackingLoading(true);
+    try {
+      const res = await ApiService.trackParcel(ttn, selectedCarrier);
+      if (res.success && res.timelineEvents) {
+        setTimelineEvents(res.timelineEvents);
+      } else if (res.error) {
+        setTimelineEvents((prev) => [...prev, `⚠️ ${res.error}`]);
+      }
+    } catch (error) {
+      console.warn('Помилка трекінгу посилки:', error);
+    } finally {
+      setIsTrackingLoading(false);
+    }
+  };
 
   const handleTrackingChange = (ttn: string) => {
     setTrackingNumber(ttn);
     if (ttn.length >= 8) {
-      let newEvents = [...timelineEvents];
-      newEvents.push(`🔍 Опитування API (${carrier}): ТТН ${ttn} знайдено`);
-      if (carrier === 'Нова Пошта') {
-        newEvents.push('🚚 Відправлення прямує до міста отримувача (Нова Пошта)');
-      } else {
-        newEvents.push('📮 Поштове відправлення прийнято у відділенні (Укрпошта)');
-      }
-      setTimelineEvents(newEvents);
+      handleFetchTracking(ttn, carrier);
+    }
+  };
+
+  const handleCarrierChange = (newCarrier: string) => {
+    setCarrier(newCarrier);
+    if (trackingNumber.length >= 8) {
+      handleFetchTracking(trackingNumber, newCarrier);
     }
   };
 
@@ -64,61 +86,73 @@ const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
     : `${typeof item?.totalAmount === 'number' ? item.totalAmount : 0} грн`;
 
   return (
-    <View style={styles.orderCardWrapper}>
+    <View style={[styles.orderCardWrapper, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
       <AIReportView report={item} totalAmount={formattedTotal} showAddButton={false} />
 
       {/* Блок введення ТТН та вибору пошти */}
-      <View style={styles.trackingContainer}>
+      <View style={[styles.trackingContainer, { backgroundColor: theme.bgDark, borderColor: theme.cardBorder }]}>
         <View style={styles.carrierRow}>
           <TouchableOpacity 
-            style={[styles.carrierBadge, carrier === 'Нова Пошта' && styles.carrierActive]} 
-            onPress={() => setCarrier('Нова Пошта')}
+            style={[styles.carrierBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }, carrier === 'Нова Пошта' && { backgroundColor: theme.primary, borderColor: theme.primary }]} 
+            onPress={() => handleCarrierChange('Нова Пошта')}
           >
-            <Text style={[styles.carrierText, carrier === 'Нова Пошта' && styles.carrierTextActive]}>Нова Пошта</Text>
+            <Text style={[styles.carrierText, { color: theme.textSecondary }, carrier === 'Нова Пошта' && { color: theme.bgDark, fontWeight: '700' }]}>Нова Пошта</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.carrierBadge, carrier === 'Укрпошта' && styles.carrierActive]} 
-            onPress={() => setCarrier('Укрпошта')}
+            style={[styles.carrierBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }, carrier === 'Укрпошта' && { backgroundColor: theme.primary, borderColor: theme.primary }]} 
+            onPress={() => handleCarrierChange('Укрпошта')}
           >
-            <Text style={[styles.carrierText, carrier === 'Укрпошта' && styles.carrierTextActive]}>Укрпошта</Text>
+            <Text style={[styles.carrierText, { color: theme.textSecondary }, carrier === 'Укрпошта' && { color: theme.bgDark, fontWeight: '700' }]}>Укрпошта</Text>
           </TouchableOpacity>
         </View>
 
-        <TextInput
-          style={styles.trackingInput}
-          placeholder="Введіть номер ТТН (напр. 20450...)"
-          placeholderTextColor="#8e8e93"
-          value={trackingNumber}
-          onChangeText={handleTrackingChange}
-        />
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={[styles.trackingInput, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textPrimary }]}
+            placeholder="Введіть номер ТТН (напр. 20450...)"
+            placeholderTextColor={theme.textSecondary}
+            value={trackingNumber}
+            onChangeText={handleTrackingChange}
+          />
+          {isTrackingLoading && <ActivityIndicator size="small" color={theme.primary} style={styles.loaderInput} />}
+        </View>
       </View>
 
       {/* Кнопки кроків життєвого циклу */}
       <View style={styles.stepsRow}>
-        <TouchableOpacity style={[styles.stepBtn, steps.step1 && styles.stepBtnActive]} onPress={() => handleToggleStep(1)}>
-          <Text style={[styles.stepText, steps.step1 && styles.stepTextActive]}>{steps.step1 ? '✓ В роботу' : '1. В роботу'}</Text>
+        <TouchableOpacity 
+          style={[styles.stepBtn, { backgroundColor: theme.bgDark, borderColor: theme.cardBorder }, steps.step1 && { backgroundColor: theme.accentGain, borderColor: theme.accentGain }]} 
+          onPress={() => handleToggleStep(1)}
+        >
+          <Text style={[styles.stepText, { color: theme.textSecondary }, steps.step1 && styles.stepTextActive]}>{steps.step1 ? '✓ В роботу' : '1. В роботу'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.stepBtn, steps.step2 && styles.stepBtnActive]} onPress={() => handleToggleStep(2)}>
-          <Text style={[styles.stepText, steps.step2 && styles.stepTextActive]}>{steps.step2 ? '✓ Відправлено' : '2. Відправлено'}</Text>
+        <TouchableOpacity 
+          style={[styles.stepBtn, { backgroundColor: theme.bgDark, borderColor: theme.cardBorder }, steps.step2 && { backgroundColor: theme.accentGain, borderColor: theme.accentGain }]} 
+          onPress={() => handleToggleStep(2)}
+        >
+          <Text style={[styles.stepText, { color: theme.textSecondary }, steps.step2 && styles.stepTextActive]}>{steps.step2 ? '✓ Відправлено' : '2. Відправлено'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.stepBtn, steps.step3 && styles.stepBtnActive]} onPress={() => handleToggleStep(3)}>
-          <Text style={[styles.stepText, steps.step3 && styles.stepTextActive]}>{steps.step3 ? '✓ Забрано' : '3. Забрано'}</Text>
+        <TouchableOpacity 
+          style={[styles.stepBtn, { backgroundColor: theme.bgDark, borderColor: theme.cardBorder }, steps.step3 && { backgroundColor: theme.accentGain, borderColor: theme.accentGain }]} 
+          onPress={() => handleToggleStep(3)}
+        >
+          <Text style={[styles.stepText, { color: theme.textSecondary }, steps.step3 && styles.stepTextActive]}>{steps.step3 ? '✓ Забрано' : '3. Забрано'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Кнопка розгортання логів (Таймлайн посилки) */}
-      <TouchableOpacity style={styles.timelineToggleBtn} onPress={() => setShowTimeline(!showTimeline)}>
-        <Text style={styles.timelineToggleText}>
+      <TouchableOpacity style={[styles.timelineToggleBtn, { backgroundColor: theme.bgDark }]} onPress={() => setShowTimeline(!showTimeline)}>
+        <Text style={[styles.timelineToggleText, { color: theme.primary }]}>
           {showTimeline ? '▲ Сховати історію подій (Трекінг)' : '📦 Показати історію подій (Трекінг)'}
         </Text>
       </TouchableOpacity>
 
       {showTimeline && (
-        <View style={styles.timelineBox}>
+        <View style={[styles.timelineBox, { backgroundColor: theme.bgDark, borderColor: theme.cardBorder }]}>
           {timelineEvents.map((event, index) => (
             <View key={index} style={styles.timelineItem}>
-              <View style={styles.timelineDot} />
-              <Text style={styles.timelineText}>{event}</Text>
+              <View style={[styles.timelineDot, { backgroundColor: theme.primary }]} />
+              <Text style={[styles.timelineText, { color: theme.textPrimary }]}>{event}</Text>
             </View>
           ))}
         </View>
@@ -130,14 +164,43 @@ const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
 OrderItemRow.displayName = 'OrderItemRow';
 
 export default function OrdersScreen() {
+  const { theme } = useAppTheme();
+  const navigation = useNavigation<any>();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Стан для автономного швидкого трекінгу будь-якої посилки зверху
+  const [standaloneTTN, setStandaloneTTN] = useState('');
+  const [standaloneCarrier, setStandaloneCarrier] = useState<'Нова Пошта' | 'Укрпошта'>('Нова Пошта');
+  const [standaloneResult, setStandaloneResult] = useState<any>(null);
+  const [isStandaloneLoading, setIsStandaloneLoading] = useState(false);
 
   const isMountedRef = useRef<boolean>(true);
   useEffect(() => {
     return () => { isMountedRef.current = false; };
   }, []);
+
+  const handleStandaloneTrack = async () => {
+    if (!standaloneTTN || standaloneTTN.length < 5) {
+      Alert.alert('Увага', 'Введіть коректний номер ТТН');
+      return;
+    }
+    setIsStandaloneLoading(true);
+    try {
+      const res = await ApiService.trackParcel(standaloneTTN, standaloneCarrier);
+      if (res.success) {
+        setStandaloneResult(res);
+      } else {
+        Alert.alert('Помилка', res.error || 'Посилку не знайдено');
+      }
+    } catch (err) {
+      Alert.alert('Помилка', 'Не вдалося отримати дані з поштового сервера.');
+    } finally {
+      setIsStandaloneLoading(false);
+    }
+  };
 
   const loadOrders = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -187,61 +250,200 @@ export default function OrdersScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f7" />
-        <ActivityIndicator size="large" color="#007aff" />
-        <Text style={styles.loadingText}>Завантаження замовлень...</Text>
+      <SafeAreaView style={[styles.centered, { backgroundColor: theme.bgDark }]}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Завантаження замовлень...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f7" />
+    <View style={[styles.container, { backgroundColor: theme.bgDark }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+      
+      {/* Розкішний фоновий градієнт із променями */}
+      <AuraHeader />
+
+      {/* Наш власний преміальний TopBar із кнопкою меню ☰ */}
+      <View style={styles.topBar}>
+        <TouchableOpacity 
+          style={[styles.menuBtn, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
+          onPress={() => navigation.openDrawer()}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.menuIcon, { color: theme.textPrimary }]}>☰</Text>
+        </TouchableOpacity>
+        <View>
+          <Text style={[styles.topBarTitle, { color: theme.textPrimary }]}>📦 Замовлення</Text>
+          <Text style={[styles.topBarSub, { color: theme.textSecondary }]}>Управління та швидкий трекінг</Text>
+        </View>
+      </View>
+
       <FlatList
         data={orders}
         keyExtractor={(item, index) => item?.id ? String(item.id) : `order-${index}`}
         renderItem={renderOrderItem}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Нових замовлень немає 📭{'\n'}Додайте їх через ШІ-помічник!</Text>
+        ListHeaderComponent={
+          <View style={[styles.standaloneTrackingCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
+            <Text style={[styles.standaloneTitle, { color: theme.textPrimary }]}>⚡ Швидкий пошук посилки за ТТН</Text>
+            
+            <View style={styles.carrierRow}>
+              <TouchableOpacity 
+                style={[styles.carrierBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }, standaloneCarrier === 'Нова Пошта' && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                onPress={() => setStandaloneCarrier('Нова Пошта')}
+              >
+                <Text style={[styles.carrierText, { color: theme.textSecondary }, standaloneCarrier === 'Нова Пошта' && { color: theme.bgDark, fontWeight: '700' }]}>Нова Пошта</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.carrierBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }, standaloneCarrier === 'Укрпошта' && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                onPress={() => setStandaloneCarrier('Укрпошта')}
+              >
+                <Text style={[styles.carrierText, { color: theme.textSecondary }, standaloneCarrier === 'Укрпошта' && { color: theme.bgDark, fontWeight: '700' }]}>Укрпошта</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.searchRow}>
+              <TextInput
+                style={[styles.standaloneInput, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textPrimary }]}
+                placeholder="Введіть номер ТТН (напр. 20450...)"
+                placeholderTextColor={theme.textSecondary}
+                value={standaloneTTN}
+                onChangeText={setStandaloneTTN}
+                keyboardType="number-pad"
+              />
+              <TouchableOpacity style={[styles.trackButton, { backgroundColor: theme.primary }]} onPress={handleStandaloneTrack} disabled={isStandaloneLoading}>
+                {isStandaloneLoading ? (
+                  <ActivityIndicator size="small" color={theme.bgDark} />
+                ) : (
+                  <Text style={[styles.trackButtonText, { color: theme.bgDark }]}>Знайти</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {standaloneResult && (
+              <View style={[styles.resultBox, { backgroundColor: theme.bgDark, borderColor: theme.cardBorder }]}>
+                <Text style={[styles.resultStatus, { color: theme.primary }]}>📍 Статус: {standaloneResult.status}</Text>
+                {standaloneResult.warehouse && <Text style={[styles.resultSub, { color: theme.textPrimary }]}>🏢 Відділення: {standaloneResult.warehouse}</Text>}
+                {standaloneResult.weight && <Text style={[styles.resultSub, { color: theme.textPrimary }]}>⚖️ Вага: {standaloneResult.weight} кг</Text>}
+                {standaloneResult.backDeliverySum && Number(standaloneResult.backDeliverySum) > 0 && (
+                  <Text style={[styles.resultSub, { color: theme.textPrimary }]}>💰 Післяплата: {standaloneResult.backDeliverySum} грн</Text>
+                )}
+                
+                <View style={styles.autoStepsRow}>
+                  <View style={[styles.autoStep, { backgroundColor: theme.cardBorder }, styles.autoStepActive]}>
+                    <Text style={styles.autoStepText}>✓ В роботу</Text>
+                  </View>
+                  <View style={[styles.autoStep, { backgroundColor: theme.cardBorder }, (standaloneResult.status.includes('прямує') || standaloneResult.status.includes('Отримано') || standaloneResult.status.includes('Прибуло')) ? { backgroundColor: theme.primary } : null]}>
+                    <Text style={styles.autoStepText}>
+                      {(standaloneResult.status.includes('прямує') || standaloneResult.status.includes('Отримано') || standaloneResult.status.includes('Прибуло')) ? '✓ Відправлено' : '2. Відправлено'}
+                    </Text>
+                  </View>
+                  <View style={[styles.autoStep, { backgroundColor: theme.cardBorder }, (standaloneResult.status.includes('Отримано') || standaloneResult.status.includes('забрано')) ? { backgroundColor: theme.accentGain } : null]}>
+                    <Text style={styles.autoStepText}>
+                      {(standaloneResult.status.includes('Отримано') || standaloneResult.status.includes('забрано')) ? '✓ Забрано' : '3. Забрано'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.timelineHeader, { color: theme.textPrimary }]}>📋 Історія подій:</Text>
+                {standaloneResult.timelineEvents?.map((evt: string, idx: number) => (
+                  <Text key={idx} style={[styles.timelineItemText, { color: theme.textSecondary }]}>{evt}</Text>
+                ))}
+              </View>
+            )}
           </View>
         }
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadOrders(true)} tintColor="#007aff" />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Активних замовлень у каталозі немає 📭{'\n'}Використовуйте швидкий пошук вище або додайте через ШІ!</Text>
+          </View>
+        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadOrders(true)} tintColor={theme.primary} />}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f7' },
-  centered: { flex: 1, backgroundColor: '#f5f5f7', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  loadingText: { marginTop: 12, fontSize: 14, color: '#8e8e93', textAlign: 'center' },
-  listContainer: { padding: 12, flexGrow: 1 },
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyText: { fontSize: 15, color: '#8e8e93', textAlign: 'center', fontWeight: '500', lineHeight: 22 },
-  orderCardWrapper: { marginBottom: 16, backgroundColor: '#fff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#e5e5ea', elevation: 2 },
+  container: { flex: 1 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  loadingText: { marginTop: 12, fontSize: 14, textAlign: 'center' },
   
-  trackingContainer: { marginTop: 8, marginBottom: 8, backgroundColor: '#f9f9fb', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e5e5ea' },
-  carrierRow: { flexDirection: 'row', gap: 6, marginBottom: 6 },
-  carrierBadge: { flex: 1, paddingVertical: 4, alignItems: 'center', borderRadius: 6, backgroundColor: '#e5e5ea' },
-  carrierActive: { backgroundColor: '#007aff' },
-  carrierText: { fontSize: 11, fontWeight: '600', color: '#3a3a3c' },
-  carrierTextActive: { color: '#fff' },
-  trackingInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d1d6', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: 12, color: '#000' },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 45,
+    paddingBottom: 12,
+    zIndex: 10,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    marginRight: 12,
+  },
+  menuIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  topBarTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  topBarSub: {
+    fontSize: 11,
+  },
+
+  listContainer: { padding: 12, flexGrow: 1, zIndex: 1 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 14, textAlign: 'center', fontWeight: '500', lineHeight: 20 },
+  
+  standaloneTrackingCard: { borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, shadowOpacity: 0.2, elevation: 5 },
+  standaloneTitle: { fontSize: 13, fontWeight: '700', marginBottom: 10 },
+  searchRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  standaloneInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
+  trackButton: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18, borderRadius: 10 },
+  trackButtonText: { fontWeight: '700', fontSize: 13 },
+  
+  resultBox: { marginTop: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
+  resultStatus: { fontSize: 13, fontWeight: '700', marginBottom: 6 },
+  resultSub: { fontSize: 12, marginBottom: 3 },
+  
+  autoStepsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, marginBottom: 10, gap: 4 },
+  autoStep: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 8 },
+  autoStepActive: { backgroundColor: '#007aff' },
+  autoStepText: { fontSize: 11, fontWeight: '600', color: '#fff' },
+  
+  timelineHeader: { fontSize: 12, fontWeight: '700', marginTop: 8, marginBottom: 4 },
+  timelineItemText: { fontSize: 11, marginBottom: 2 },
+
+  orderCardWrapper: { marginBottom: 16, borderRadius: 18, padding: 16, borderWidth: 1, shadowOpacity: 0.1, elevation: 3 },
+  
+  trackingContainer: { marginTop: 12, marginBottom: 12, padding: 10, borderRadius: 12, borderWidth: 1 },
+  carrierRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  carrierBadge: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 8, borderWidth: 1 },
+  carrierText: { fontSize: 11, fontWeight: '600' },
+  inputWrapper: { position: 'relative', justifyContent: 'center' },
+  trackingInput: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, paddingRight: 30 },
+  loaderInput: { position: 'absolute', right: 10 },
 
   stepsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: 6 },
-  stepBtn: { flex: 1, paddingVertical: 8, paddingHorizontal: 4, backgroundColor: '#f2f2f7', borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#d1d1d6' },
-  stepBtnActive: { backgroundColor: '#34c759', borderColor: '#248a3d' },
-  stepText: { fontSize: 11, fontWeight: '600', color: '#3a3a3c' },
-  stepTextActive: { color: '#ffffff' },
+  stepBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 6, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
+  stepText: { fontSize: 11, fontWeight: '600' },
+  stepTextActive: { color: '#ffffff', fontWeight: '700' },
 
-  timelineToggleBtn: { marginTop: 10, paddingVertical: 6, alignItems: 'center', backgroundColor: '#f0f0f5', borderRadius: 6 },
-  timelineToggleText: { fontSize: 11, fontWeight: '600', color: '#007aff' },
-  timelineBox: { marginTop: 6, backgroundColor: '#fcfcfd', padding: 8, borderRadius: 6, borderWidth: 1, borderColor: '#eee' },
-  timelineItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 3 },
-  timelineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#007aff', marginRight: 6 },
-  timelineText: { fontSize: 11, color: '#3a3a3c' }
+  timelineToggleBtn: { marginTop: 12, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
+  timelineToggleText: { fontSize: 11, fontWeight: '700' },
+  timelineBox: { marginTop: 8, padding: 10, borderRadius: 8, borderWidth: 1 },
+  timelineItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
+  timelineDot: { width: 6, height: 6, borderRadius: 3, marginRight: 8 },
+  timelineText: { fontSize: 11 }
 });

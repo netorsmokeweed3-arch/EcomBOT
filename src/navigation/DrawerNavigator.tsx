@@ -1,7 +1,7 @@
 import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 
-// Імпортуємо створені екрани (додаємо фігурні дужки, якщо експорт іменований, або залишаємо так, залежно від того, як написані самі екрани)
+// Імпортуємо екрани
 import OrdersScreen from '../screens/OrdersScreen';
 import IntegrationsScreen from '../screens/IntegrationsScreen';
 import AIScreen from '../screens/AIScreen';
@@ -14,11 +14,38 @@ export default function DrawerNavigator() {
     <Drawer.Navigator
       initialRouteName="Orders"
       screenOptions={{
-        headerStyle: { backgroundColor: '#2563eb' },
-        headerTintColor: '#fff',
-        drawerActiveTintColor: '#2563eb',
-        drawerInactiveTintColor: '#334155',
-        drawerLabelStyle: { fontSize: 16, fontWeight: '600' },
+        headerShown: false,
+        drawerType: 'slide',
+        overlayColor: 'rgba(5, 8, 15, 0.75)',
+        drawerStyle: {
+          backgroundColor: '#121620',
+          width: 280,
+          marginVertical: 35, // Робить панель плаваючою по вертикалі
+          height: '92%',      // Фіксована висота, щоб верх і низ були акуратно заокругленими
+          borderTopRightRadius: 36,
+          borderBottomRightRadius: 36,
+          borderRightWidth: 1.5,
+          borderRightColor: 'rgba(255, 255, 255, 0.22)',
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(255, 255, 255, 0.12)',
+          shadowColor: '#000',
+          shadowOffset: { width: 20, height: 0 },
+          shadowOpacity: 0.8,
+          shadowRadius: 30,
+          elevation: 25,
+        },
+        drawerActiveTintColor: '#34c759',
+        drawerInactiveTintColor: '#94a3b8',
+        drawerLabelStyle: { 
+          fontSize: 15, 
+          fontWeight: '700',
+          marginLeft: -8,
+        },
+        drawerItemStyle: {
+          borderRadius: 14,
+          paddingHorizontal: 12,
+          marginVertical: 4,
+        },
       }}
     >
       <Drawer.Screen 

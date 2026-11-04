@@ -11,12 +11,11 @@ import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import SupportScreen from './src/screens/SupportScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
-const Drawer = createDrawerNavigator();
+// Імпортуємо контекст преміальних тем та хук сповіщень
+import { ThemeProvider, useAppTheme } from './src/theme/ThemeContext';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 
-const CustomTheme = {
-  ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: '#f5f5f7', card: '#ffffff', text: '#1c1c1e', border: '#e5e5ea' },
-};
+const Drawer = createDrawerNavigator();
 
 interface ErrorBoundaryProps { children: ReactNode; }
 interface ErrorBoundaryState { hasError: boolean; error: Error | null; }
@@ -43,40 +42,89 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
+function AppNavigator() {
+  const { theme } = useAppTheme();
+  
+  // Динамічна тема навігації
+  const dynamicNavigationTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: theme.bgDark,
+      card: 'transparent',
+      text: theme.textPrimary,
+      border: 'transparent',
+    },
+  };
+
+  // Автоматично ініціалізуємо фонові Push-сповіщення при запуску додатка
+  usePushNotifications();
+
+  return (
+    <NavigationContainer theme={dynamicNavigationTheme}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+      <Drawer.Navigator
+        initialRouteName="Orders"
+        screenOptions={{
+          headerShown: false,
+          drawerType: 'front', // Меню виїжджає поверх екрана шторкою, нічого не зсуваючи!
+          overlayColor: 'rgba(3, 5, 10, 0.8)', // Глибоке затемнення, що повністю гасить задній план
+          drawerStyle: {
+            backgroundColor: '#0E121C', // Щільний матовий фон — жодних просвітів ззаду!
+            width: 280,
+            marginVertical: 35, // Плаваюча капсула з відступами зверху і знизу
+            height: '92%',      // Фіксована висота для акуратних закруглень
+            borderTopRightRadius: 36,
+            borderBottomRightRadius: 36,
+            // Світловий ефект об'єму (опуклість) по правій та верхній межі
+            borderRightWidth: 1.5,
+            borderRightColor: 'rgba(255, 255, 255, 0.22)',
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(255, 255, 255, 0.12)',
+            // Глибока преміальна тінь
+            shadowColor: '#000',
+            shadowOffset: { width: 25, height: 0 },
+            shadowOpacity: 0.9,
+            shadowRadius: 35,
+            elevation: 30,
+          },
+          drawerActiveTintColor: theme.primary,
+          drawerInactiveTintColor: theme.textSecondary,
+          drawerLabelStyle: { fontSize: 15, fontWeight: '700', marginLeft: -8 },
+          drawerItemStyle: {
+            borderRadius: 14,
+            paddingHorizontal: 12,
+            marginVertical: 4,
+          },
+        }}
+      >
+        <Drawer.Screen name="Orders" component={OrdersScreen} options={{ title: '📦 Замовлення' }} />
+        <Drawer.Screen name="Integrations" component={IntegrationsScreen} options={{ title: '🔌 Інтеграції (Магазини)' }} />
+        <Drawer.Screen name="Analytics" component={AnalyticsScreen} options={{ title: '📊 Аналітика та Доходи' }} />
+        <Drawer.Screen name="AI" component={AIScreen} options={{ title: '🤖 ШІ-Помічник' }} />
+        <Drawer.Screen name="AIChat" component={AIChatScreen} options={{ title: '💬 Чати та клієнти' }} />
+        <Drawer.Screen name="Support" component={SupportScreen} options={{ title: '⚠️ Підтримка та повернення' }} />
+        <Drawer.Screen name="Settings" component={SettingsScreen} options={{ title: '⚙️ Налаштування' }} />
+      </Drawer.Navigator>
+    </NavigationContainer>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <NavigationContainer theme={CustomTheme}>
-        <Drawer.Navigator
-          initialRouteName="Orders"
-          screenOptions={{
-            headerStyle: { backgroundColor: '#ffffff', elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: '#e5e5ea' },
-            headerTintColor: '#1c1c1e',
-            headerTitleStyle: { fontWeight: '600', fontSize: 17 },
-            drawerActiveTintColor: '#007aff',
-            drawerInactiveTintColor: '#3a3a3c',
-            drawerLabelStyle: { fontSize: 15, fontWeight: '600', marginLeft: -10 },
-          }}
-        >
-          <Drawer.Screen name="Orders" component={OrdersScreen} options={{ title: '📦 Замовлення' }} />
-          <Drawer.Screen name="Integrations" component={IntegrationsScreen} options={{ title: '🔌 Інтеграції (Магазини)' }} />
-          <Drawer.Screen name="Analytics" component={AnalyticsScreen} options={{ title: '📊 Аналітика та Доходи' }} />
-          <Drawer.Screen name="AI" component={AIScreen} options={{ title: '🤖 ШІ-Помічник' }} />
-          <Drawer.Screen name="AIChat" component={AIChatScreen} options={{ title: '💬 Інтерактивний чат ШІ' }} />
-          <Drawer.Screen name="Support" component={SupportScreen} options={{ title: '⚠️ Підтримка та повернення', headerShown: false }} />
-          <Drawer.Screen name="Settings" component={SettingsScreen} options={{ title: '⚙️ Налаштування' }} />
-        </Drawer.Navigator>
-      </NavigationContainer>
+      <ThemeProvider>
+        <AppNavigator />
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f5f5f7' },
-  errorCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, alignItems: 'center', borderWidth: 1, borderColor: '#e5e5ea' },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#0B0C0E' },
+  errorCard: { backgroundColor: '#15171E', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   errorIcon: { fontSize: 36, marginBottom: 12 },
-  errorTitle: { fontSize: 18, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 8, textAlign: 'center' },
-  errorButton: { backgroundColor: '#007aff', width: '100%', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 15 },
-  errorButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  errorTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 8, textAlign: 'center' },
+  errorButton: { backgroundColor: '#D4AF37', width: '100%', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 15 },
+  errorButtonText: { color: '#0B0C0E', fontSize: 16, fontWeight: '700' },
 });
