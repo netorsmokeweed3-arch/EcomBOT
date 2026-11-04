@@ -22,22 +22,23 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({ completedOrders, o
   };
 
   const renderOrderItem = ({ item }: { item: Order }) => {
-    const amountVal = typeof item.totalAmount === 'object' && item.totalAmount !== null && 'amount' in item.totalAmount
-      ? (item.totalAmount as any).amount
-      : item.totalAmount || 0;
+    const rawAmount = item.totalAmount;
+    const amountVal = typeof rawAmount === 'object' && rawAmount !== null && 'amount' in rawAmount
+      ? (rawAmount as any).amount
+      : typeof rawAmount === 'number' ? rawAmount : 0;
 
-    const formattedDate = formatDate(item.createdAt);
+    const formattedAmount = item.totalAmountFormatted || (item as any).totalFormatted || `${amountVal} грн`;
+    const formattedDate = formatDate(item.createdAt || item.created_at);
 
     return (
       <View style={styles.card}>
         <View style={styles.row}>
-          <Text style={styles.orderNumber}>#{item.orderNumber || item.id}</Text>
-          <Text style={styles.price}>{item.totalAmountFormatted || `${amountVal} грн`}</Text>
+          <Text style={styles.orderNumber}>#{item.orderNumber || item.order_number || item.id}</Text>
+          <Text style={styles.price}>{formattedAmount}</Text>
         </View>
 
-        <Text style={styles.text} numberOfLines={1}>👤 {item.customerName || 'Клієнт'}</Text>
+        <Text style={styles.text} numberOfLines={1}>👤 {item.customerName || item.customer_name || 'Клієнт'}</Text>
 
-        {/* Відображення дати та часу */}
         {formattedDate ? (
           <Text style={styles.dateText}>📅 {formattedDate}</Text>
         ) : null}

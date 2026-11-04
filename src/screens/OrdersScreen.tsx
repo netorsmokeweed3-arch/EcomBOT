@@ -19,6 +19,20 @@ const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
     item?.timelineEvents || ['📦 Замовлення створено в системі']
   );
 
+  const handleTrackingChange = (ttn: string) => {
+    setTrackingNumber(ttn);
+    if (ttn.length >= 8) {
+      let newEvents = [...timelineEvents];
+      newEvents.push(`🔍 Опитування API (${carrier}): ТТН ${ttn} знайдено`);
+      if (carrier === 'Нова Пошта') {
+        newEvents.push('🚚 Відправлення прямує до міста отримувача (Нова Пошта)');
+      } else {
+        newEvents.push('📮 Поштове відправлення прийнято у відділенні (Укрпошта)');
+      }
+      setTimelineEvents(newEvents);
+    }
+  };
+
   const handleToggleStep = (stepNumber: 1 | 2 | 3) => {
     const updatedSteps = { ...steps, [`step${stepNumber}`]: !steps[`step${stepNumber}`] };
     setSteps(updatedSteps);
@@ -45,8 +59,9 @@ const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
     }
   };
 
-  // Безпечно приводимо totalAmount до формату, який очікує AIReportView
-  const formattedTotal = item?.totalAmount?.formatted || item?.total_amount?.formatted || `${item?.totalAmount?.amount || item?.total_amount?.amount || 0} грн`;
+  const formattedTotal = typeof item?.totalAmount === 'object' && item?.totalAmount !== null && 'formatted' in item.totalAmount
+    ? (item.totalAmount as any).formatted
+    : `${typeof item?.totalAmount === 'number' ? item.totalAmount : 0} грн`;
 
   return (
     <View style={styles.orderCardWrapper}>
@@ -74,7 +89,7 @@ const OrderItemRow = memo(({ item, onCompleteOrder }: OrderItemProps) => {
           placeholder="Введіть номер ТТН (напр. 20450...)"
           placeholderTextColor="#8e8e93"
           value={trackingNumber}
-          onChangeText={setTrackingNumber}
+          onChangeText={handleTrackingChange}
         />
       </View>
 
@@ -229,6 +244,4 @@ const styles = StyleSheet.create({
   timelineItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 3 },
   timelineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#007aff', marginRight: 6 },
   timelineText: { fontSize: 11, color: '#3a3a3c' }
-
-
 });

@@ -3,9 +3,8 @@ import { Order } from '../types/order';
 import { AIReport } from '../types/aiReport';
 import { ShopIntegration } from '../types/shop';
 
-// Адреса бекенду на Render
 const API_BASE_URL = 'https://ecombot-2.onrender.com';
-const REQUEST_TIMEOUT_MS = 30000; // Render може «прокидатися» довго, тому тайм-аут з запасом
+const REQUEST_TIMEOUT_MS = 30000;
 const SHOPS_STORAGE_KEY = 'saved_shops';
 
 const storage = createMMKV();
@@ -94,6 +93,7 @@ function mapOrder(value: unknown): Order {
   const statusValue = source.status;
   const status = asRecord(statusValue);
   const rawItems = source.items ?? source.line_items ?? source.products;
+  
   const items = Array.isArray(rawItems)
     ? rawItems.flatMap((rawItem, index) => {
         const item = asRecord(rawItem);
@@ -114,6 +114,7 @@ function mapOrder(value: unknown): Order {
         }];
       })
     : [];
+
   const street = firstText(address.street, address.address1, address.address);
   const street2 = firstText(address.street2, address.address2);
   const city = firstText(source.city, address.city);
@@ -164,6 +165,9 @@ function moneyPayload(value: number, currency: string, formatted?: string) {
 
 function toBackendOrder(order: Order): DataRecord {
   const currency = order.currency || 'UAH';
+  const orderAmount = typeof order.totalAmount === 'number' ? order.totalAmount : 0;
+  const orderStatusText = typeof order.status === 'object' && order.status !== null ? order.status.text : (order.status || 'processing');
+
   return {
     id: order.id,
     order_number: order.orderNumber,
@@ -180,21 +184,25 @@ function toBackendOrder(order: Order): DataRecord {
       country: order.country || '',
       full: order.deliveryAddress,
     },
-    total_amount: moneyPayload(order.totalAmount, currency, order.totalAmountFormatted),
+    total_amount: moneyPayload(orderAmount, currency, order.totalAmountFormatted),
     currency,
-    items: order.items.map((item) => ({
-      id: item.id,
-      title: item.name,
-      sku: item.sku || '',
-      quantity: item.quantity,
-      unit_price: moneyPayload(item.price, currency, item.priceFormatted),
-      line_total: moneyPayload(item.lineTotal ?? item.price * item.quantity, currency, item.lineTotalFormatted),
-    })),
-    status: { text: order.status, cancelled: order.status.toLowerCase().includes('cancel') },
+    items: (order.items ?? []).map((item) => {
+      const itemPrice = typeof item.price === 'number' ? item.price : 0;
+      const itemQty = item.quantity ?? 1;
+      const itemLineTotal = typeof item.lineTotal === 'number' ? item.lineTotal : itemPrice * itemQty;
+      return {
+        id: item.id,
+        title: item.name,
+        sku: item.sku || '',
+        quantity: itemQty,
+        unit_price: moneyPayload(itemPrice, currency, item.priceFormatted),
+        line_total: moneyPayload(itemLineTotal, currency, item.lineTotalFormatted),
+      };
+    }),
+    status: { text: orderStatusText, cancelled: orderStatusText.toLowerCase().includes('cancel') },
   };
 }
 
-// Універсальний запит з тайм-аутом і перетворенням помилок у ApiError
 async function request<T extends { success: boolean; error?: string }>(
   path: string,
   options: RequestOptions = {}
@@ -248,7 +256,6 @@ export function getErrorMessage(error: unknown): string {
 }
 
 export class ApiService {
-  // Підключені магазини з MMKV (назва + API-токен)
   static getSavedShops(): ShopIntegration[] {
     try {
       const json = storage.getString(SHOPS_STORAGE_KEY);
@@ -259,13 +266,11 @@ export class ApiService {
     }
   }
 
-  // Замовлення одного магазину: назва (shop) і токен (token) передаються в тілі POST-запиту
   static async getOrders(shop: ShopIntegration): Promise<Order[]> {
     const data = await request<OrdersResponse>('/api/orders', {
       method: 'POST',
       body: { shop: shop.name, token: shop.token },
     });
-    // Позначаємо кожне замовлення магазином-джерелом, щоб аналіз знав, з якого воно магазину
     return (data.orders ?? []).map((order) => ({
       ...mapOrder(order),
       shopId: shop.id,
@@ -273,8 +278,6 @@ export class ApiService {
     }));
   }
 
-  // Замовлення з усіх підключених магазинів.
-  // Якщо частина магазинів недоступна, повертаються успішні; помилка кидається, лише якщо не вдалося жоден.
   static async getAllOrders(): Promise<Order[]> {
     const shops = this.getSavedShops();
     if (shops.length === 0) {
@@ -299,7 +302,6 @@ export class ApiService {
     return orders;
   }
 
-  // Надсилання замовлення, історії чату та даних магазину (shop, token) на бекенд для аналізу через Claude
   static async processWithAI(order: Order, chatHistory: string, shop: ShopIntegration): Promise<AIReport> {
     const data = await request<AIResponse>('/api/process-ai', {
       method: 'POST',
@@ -315,6 +317,10 @@ export class ApiService {
       throw new ApiError('ШІ не повернув звіт.', 'parse');
     }
     const report = mapOrder(data.ai_report);
+    const orderTotalAmount = typeof order.totalAmount === 'number' ? order.totalAmount : 0;
+    const reportItems = report.items ?? [];
+    const orderItems = order.items ?? [];
+
     return {
       ...order,
       ...report,
@@ -330,21 +336,23 @@ export class ApiService {
       deliveryMethod: report.deliveryMethod || order.deliveryMethod,
       email: report.email || order.email,
       status: order.status,
-      totalAmount: report.totalAmountFormatted ? report.totalAmount : order.totalAmount,
+      totalAmount: report.totalAmountFormatted ? report.totalAmount : orderTotalAmount,
       totalAmountFormatted: report.totalAmountFormatted || order.totalAmountFormatted,
       currency: report.currency || order.currency,
       createdAt: report.createdAt || order.createdAt,
-      items: report.items.length
-        ? report.items.map((item, index) => {
-            const original = order.items[index];
+      items: reportItems.length
+        ? reportItems.map((item, index) => {
+            const original = orderItems[index];
+            const itemPrice = typeof item.price === 'number' ? item.price : 0;
+            const originalPrice = original && typeof original.price === 'number' ? original.price : 0;
             return {
               ...item,
-              price: item.price || original?.price || 0,
+              price: itemPrice || originalPrice || 0,
               lineTotal: item.lineTotal ?? original?.lineTotal,
               lineTotalFormatted: item.lineTotalFormatted || original?.lineTotalFormatted,
             };
           })
-        : order.items,
+        : orderItems,
       aiSummary: report.aiSummary || text(asRecord(data.ai_report)?.ai_summary) || '',
     };
   }

@@ -33,11 +33,7 @@ export default function AIScreen() {
     try {
       if (isMountedRef.current) setLoadingStepText('Синхронізація курсів валют та замовлень...');
       
-      // Одночасно тягнемо і замовлення, і оновлені ринкові курси валют через API-сервіс
-      const [orders] = await Promise.all([
-        ApiService.getAllOrders(),
-        // Якщо на бекенді є метод синхронізації валют, він спрацює тут паралельно
-      ]);
+      const orders = await ApiService.getAllOrders();
       
       if (!orders || !Array.isArray(orders) || orders.length === 0) {
         if (isMountedRef.current) Alert.alert('Увага ⚠️', 'Немає замовлень для аналізу.');
@@ -45,13 +41,14 @@ export default function AIScreen() {
       }
 
       const [firstOrder] = orders;
-      if (!firstOrder || !firstOrder.shopId) {
+      const shopId = firstOrder.shopId || (firstOrder as any).shop_id;
+      if (!firstOrder || !shopId) {
         if (isMountedRef.current) Alert.alert('Помилка ❌', 'Некоректні дані замовлення або відсутній ID магазину.');
         return;
       }
 
       const savedShops = ApiService.getSavedShops() || [];
-      const shop = savedShops.find((saved) => saved.id === firstOrder.shopId);
+      const shop = savedShops.find((saved) => saved.id === shopId);
       
       if (!shop) {
         if (isMountedRef.current) Alert.alert('Помилка ❌', 'Не знайдено магазин для цього замовлення.');

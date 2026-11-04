@@ -67,7 +67,7 @@ const OrderItemRow = memo(({ item, index, currency }: { readonly item: OrderItem
   const q = typeof item?.quantity === 'number' ? item.quantity : 1;
   const itemTotal = sanitizeText(item?.lineTotalFormatted) || `${(uPrice * q).toFixed(2)} ${currencyLabel}`;
   const unitPrice = sanitizeText(item?.priceFormatted) || `${uPrice.toFixed(2)} ${currencyLabel}`;
-  return <Text style={styles.detailLine}>{`  • ${index + 1}. ${sanitizeText(item?.name) || 'Товар'} — ${q} шт. × ${unitPrice} = ${itemTotal}`}</Text>;
+  return <Text style={styles.detailLine}>{`  • ${index + 1}. ${sanitizeText(item?.name || item?.title) || 'Товар'} — ${q} шт. × ${unitPrice} = ${itemTotal}`}</Text>;
 });
 OrderItemRow.displayName = 'OrderItemRow';
 
@@ -87,37 +87,37 @@ function AIReportView({ report, totalAmount, onAddOrder, onDeleteOrder, showAddB
   const isRu = useMemo(() => isRussianLanguage(report), [report]);
   const t = DICTIONARY[isRu ? 'ru' : 'uk'];
 
-  const rawStatus = sanitizeText(report?.status) || 'new';
+  const rawStatus = sanitizeText(typeof report?.status === 'object' ? report?.status?.text : report?.status) || 'new';
   const orderStatus = useMemo(() => getLocalizedStatus(rawStatus, isRu), [rawStatus, isRu]);
-  const clientName = sanitizeText(report?.customerName) || t.noClient;
+  const clientName = sanitizeText(report?.customerName || report?.customer_name) || t.noClient;
   const phone = sanitizeText(report?.phone) || t.noPhone;
   
   const headerTitle = useMemo(() => {
-    return [sanitizeText(report?.shopName), sanitizeText(report?.orderNumber) || sanitizeText(report?.id)].filter(Boolean).join(' #');
-  }, [report?.shopName, report?.orderNumber, report?.id]);
+    return [sanitizeText(report?.shopName || report?.shop_name), sanitizeText(report?.orderNumber || report?.order_number) || sanitizeText(report?.id)].filter(Boolean).join(' #');
+  }, [report?.shopName, report?.shop_name, report?.orderNumber, report?.order_number, report?.id]);
 
   const dateText = useMemo(() => {
-    const rawDate = report?.createdAt;
+    const rawDate = report?.createdAt || report?.created_at;
     if (!rawDate) return '';
     const parsedDate = new Date(rawDate);
     return Number.isNaN(parsedDate.getTime()) ? '' : parsedDate.toLocaleString(isRu ? 'ru-RU' : 'uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  }, [report?.createdAt, isRu]);
+  }, [report?.createdAt, report?.created_at, isRu]);
 
-  const deliveryName = sanitizeText(report?.deliveryAddress) || t.noAddress;
+  const deliveryName = sanitizeText(typeof report?.deliveryAddress === 'object' ? report?.deliveryAddress?.full : report?.deliveryAddress) || t.noAddress;
 
   const prettyDetailsLines = useMemo(() => {
     if (!report) return [t.noDetails];
     const lines: string[] = [];
-    const shop = sanitizeText(report.shopName);
+    const shop = sanitizeText(report.shopName || report.shop_name);
     if (shop) lines.push(`${t.shop} ${shop}`);
     
-    const orderNum = sanitizeText(report.orderNumber) || sanitizeText(report.id);
+    const orderNum = sanitizeText(report.orderNumber || report.order_number) || sanitizeText(report.id);
     if (orderNum) lines.push(`${t.orderNum} ${orderNum}`);
     
     if (rawStatus) lines.push(`${t.status} ${orderStatus}`);
     if (dateText) lines.push(`${t.date} ${dateText}`);
     
-    const customer = sanitizeText(report.customerName);
+    const customer = sanitizeText(report.customerName || report.customer_name);
     if (customer) lines.push(`${t.client} ${customer}`);
     
     const clientPhone = sanitizeText(report.phone);
@@ -126,25 +126,19 @@ function AIReportView({ report, totalAmount, onAddOrder, onDeleteOrder, showAddB
     const email = sanitizeText(report.email);
     if (email) lines.push(`📧 ${email}`);
     
-    const deliveryMethod = sanitizeText(report.deliveryMethod);
+    const deliveryMethod = sanitizeText(report.deliveryMethod || report.delivery_method);
     if (deliveryMethod) lines.push(`${t.deliveryMethod} ${deliveryMethod}`);
     
-    if (report.deliveryAddress) lines.push(`${t.deliveryAddress} ${sanitizeText(report.deliveryAddress)}`);
-    
-    const country = sanitizeText(report.country);
-    if (country) lines.push(`${t.country} ${country}`);
-    
-    const city = sanitizeText(report.city);
-    if (city) lines.push(`${t.city} ${city}`);
-
-    const amountFormatted = sanitizeText(report.totalAmountFormatted);
-    if (amountFormatted) lines.push(`${t.sum} ${amountFormatted}`);
+    if (report.deliveryAddress) {
+      const addrStr = typeof report.deliveryAddress === 'object' ? report.deliveryAddress.full : report.deliveryAddress;
+      if (addrStr) lines.push(`${t.deliveryAddress} ${sanitizeText(addrStr)}`);
+    }
 
     return lines;
   }, [report, t, rawStatus, orderStatus, dateText]);
 
   const handleMenuPress = useCallback(() => {
-    Alert.alert(t.menuTitle, `Замовлення #${report?.orderNumber || report?.id || ''}`, [
+    Alert.alert(t.menuTitle, `Замовлення #${report?.orderNumber || report?.order_number || report?.id || ''}`, [
       { text: t.cancel, style: 'cancel' },
       { text: t.deleteOption, style: 'destructive', onPress: () => report?.id && onDeleteOrder?.(report.id) }
     ]);
@@ -158,13 +152,14 @@ function AIReportView({ report, totalAmount, onAddOrder, onDeleteOrder, showAddB
   }, [report, onAddOrder]);
 
   const finalSumText = useMemo(() => {
-    const rawVal = totalAmount ?? report?.totalAmount;
-    const formatted = sanitizeText(report?.totalAmountFormatted);
+    const rawVal = totalAmount ?? report?.totalAmount ?? report?.total_amount;
+    const formatted = sanitizeText(report?.totalFormatted);
     const curr = sanitizeText(report?.currency) === 'UAH' ? t.currencyUah : sanitizeText(report?.currency) || t.currencyUah;
     if (formatted) return formatted;
     if (typeof rawVal === 'number') return `${rawVal.toFixed(2)} ${curr}`;
+    if (typeof rawVal === 'object' && rawVal !== null && 'formatted' in rawVal) return (rawVal as any).formatted;
     return `${sanitizeText(rawVal) || '0.00'} ${curr}`;
-  }, [totalAmount, report?.totalAmount, report?.totalAmountFormatted, report?.currency, t.currencyUah]);
+  }, [totalAmount, report?.totalAmount, report?.total_amount, report?.totalFormatted, report?.currency, t.currencyUah]);
 
   return (
     <View style={styles.card}>
@@ -215,7 +210,7 @@ function AIReportView({ report, totalAmount, onAddOrder, onDeleteOrder, showAddB
             <Text key={`line-${index}`} style={styles.detailLine}>{line}</Text>
           ))}
 
-          <AIChatLogView aiSummary={sanitizeText(report?.aiSummary)} chatSummary={sanitizeText((report as any)?.chat_summary)} />
+          <AIChatLogView aiSummary={sanitizeText(report?.aiSummary)} chatSummary={sanitizeText(report?.chatHistory || (report as any)?.chat_summary)} />
 
           {Array.isArray(report?.items) && report.items.length > 0 && (
             <>

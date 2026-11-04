@@ -1,38 +1,49 @@
 export interface OrderItem {
   id?: string;
   title?: string;
+  name?: string;
   sku?: string;
   quantity?: number;
+  price?: number | { amount: number; currency: string; formatted: string };
+  priceFormatted?: string;
+  lineTotal?: number;
+  line_total?: number | { amount: number; currency: string; formatted: string };
+  lineTotalFormatted?: string;
   unit_price?: { amount: number; currency: string; formatted: string };
-  line_total?: { amount: number; currency: string; formatted: string };
 }
 
 export interface Order {
   id: string;
   orderNumber?: string;
+  order_number?: string;
+  shopId?: string;
+  shopName?: string;
+  shop_name?: string;
   customerName?: string;
   customer_name?: string;
   phone?: string;
   email?: string;
   created_at?: string;
+  createdAt?: string;
   delivery_method?: string;
-  delivery_address?: {
-    street?: string;
-    city?: string;
-    region?: string;
-    postal_code?: string;
-    country?: string;
-    full?: string;
-  };
-  totalAmount?: { amount: number; currency: string; formatted: string };
-  total_amount?: { amount: number; currency: string; formatted: string };
+  deliveryMethod?: string;
+  city?: string;
+  region?: string;
+  postalCode?: string;
+  postal_code?: string;
+  country?: string;
+  deliveryAddress?: string | any;
+  totalAmount?: number | { amount: number; currency: string; formatted: string };
+  total_amount?: number | { amount: number; currency: string; formatted: string };
+  totalAmountFormatted?: string;
+  totalFormatted?: string;
   currency?: string;
-  status?: { text: string; cancelled: boolean };
+  status?: { text: string; cancelled: boolean } | string;
   items?: OrderItem[];
-  chatHistory?: string;
-  chat_history?: string;
+  chatHistory?: string | any[];
+  aiSummary?: string;
   
-  // Нові поля для трекінгу пошти
+  // Поштові поля трекінгу
   trackingNumber?: string;
   carrier?: string;
   timelineEvents?: string[];
