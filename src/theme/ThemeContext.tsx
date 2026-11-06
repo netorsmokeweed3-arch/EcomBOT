@@ -1,99 +1,88 @@
+// src/theme/ThemeContext.tsx
 import React, { createContext, useContext, useState } from 'react';
 
-export type ThemeMode = 'gold' | 'blue' | 'purple' | 'green';
-
-export interface ThemeColors {
-  mode: ThemeMode;
-  name: string;
-  bgDark: string;
-  cardBg: string;
-  cardBorder: string;
-  primary: string;
-  primaryGlow: string;
-  gradientHeader: string[];
-  textPrimary: string;
-  textSecondary: string;
-  accentGain: string;
-  accentLoss: string;
-}
-
-export const THEMES: Record<ThemeMode, ThemeColors> = {
+export const THEMES = {
   gold: {
     mode: 'gold',
-    name: '👑 Gold Lux',
-    bgDark: '#0B0C0E',
-    cardBg: '#15171E',
-    cardBorder: 'rgba(212, 175, 55, 0.25)',
-    primary: '#D4AF37',
-    primaryGlow: 'rgba(212, 175, 55, 0.15)',
-    gradientHeader: ['#2A210B', '#151208', '#0B0C0E'],
+    name: 'Gold Lux',
+    bgDark: '#0D0D0E',
+    cardBg: 'rgba(26, 26, 30, 0.65)',
+    cardBorder: 'rgba(226, 177, 103, 0.25)',
     textPrimary: '#FFFFFF',
-    textSecondary: '#9A9DAE',
+    textSecondary: '#8E8E93',
     accentGain: '#34C759',
     accentLoss: '#FF3B30',
+    primary: '#E2B167',
+    gradientHeader: ['#2A2015', '#141210', '#0D0D0E'] as [string, string, string],
   },
   blue: {
     mode: 'blue',
-    name: '💎 Cyber Blue',
-    bgDark: '#080C14',
-    cardBg: '#101726',
-    cardBorder: 'rgba(0, 122, 255, 0.25)',
-    primary: '#007AFF',
-    primaryGlow: 'rgba(0, 122, 255, 0.18)',
-    gradientHeader: ['#0A2540', '#081726', '#080C14'],
+    name: 'Cyber Blue',
+    bgDark: '#090D16',
+    cardBg: 'rgba(15, 23, 42, 0.65)',
+    cardBorder: 'rgba(56, 189, 248, 0.25)',
     textPrimary: '#FFFFFF',
-    textSecondary: '#8E9BB0',
-    accentGain: '#30D158',
-    accentLoss: '#FF453A',
+    textSecondary: '#94A3B8',
+    accentGain: '#34C759',
+    accentLoss: '#FF3B30',
+    primary: '#38BDF8',
+    gradientHeader: ['#0F172A', '#090D16', '#05070B'] as [string, string, string],
   },
   purple: {
     mode: 'purple',
-    name: '🔮 Royal Purple',
+    name: 'Royal Purple',
     bgDark: '#0B0813',
-    cardBg: '#161124',
+    cardBg: 'rgba(26, 18, 38, 0.65)',
     cardBorder: 'rgba(175, 82, 222, 0.25)',
-    primary: '#AF52DE',
-    primaryGlow: 'rgba(175, 82, 222, 0.18)',
-    gradientHeader: ['#28123B', '#160B24', '#0B0813'],
     textPrimary: '#FFFFFF',
-    textSecondary: '#A296B8',
+    textSecondary: '#A29EBB',
     accentGain: '#34C759',
     accentLoss: '#FF3B30',
+    primary: '#AF52DE',
+    gradientHeader: ['#1C102D', '#0B0813', '#050308'] as [string, string, string],
   },
   green: {
     mode: 'green',
-    name: '❇️ Emerald Green',
-    bgDark: '#060E0B',
-    cardBg: '#0F1A15',
+    name: 'Emerald Green',
+    bgDark: '#07100D',
+    cardBg: 'rgba(15, 28, 23, 0.65)',
     cardBorder: 'rgba(52, 199, 89, 0.25)',
-    primary: '#34C759',
-    primaryGlow: 'rgba(52, 199, 89, 0.18)',
-    gradientHeader: ['#0A291A', '#06170F', '#060E0B'],
     textPrimary: '#FFFFFF',
     textSecondary: '#8DA697',
-    accentGain: '#30D158',
-    accentLoss: '#FF453A',
+    accentGain: '#34C759',
+    accentLoss: '#FF3B30',
+    primary: '#34C759',
+    gradientHeader: ['#0A291A', '#07100D', '#030706'] as [string, string, string],
   },
 };
 
+export type ThemeType = typeof THEMES.gold;
+
 interface ThemeContextType {
-  theme: ThemeColors;
-  setThemeMode: (mode: ThemeMode) => void;
+  theme: ThemeType;
+  setThemeMode: (mode: keyof typeof THEMES) => void;
 }
 
-const ThemeContext = createContext<ThemeContextType>({
+export const ThemeContext = createContext<ThemeContextType>({
   theme: THEMES.gold,
   setThemeMode: () => {},
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentMode, setCurrentMode] = useState<ThemeMode>('gold');
+  const [currentThemeKey, setCurrentThemeKey] = useState<keyof typeof THEMES>('gold');
+
+  const setThemeMode = (mode: keyof typeof THEMES) => {
+    if (THEMES[mode]) {
+      setCurrentThemeKey(mode);
+    }
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme: THEMES[currentMode], setThemeMode: setCurrentMode }}>
+    <ThemeContext.Provider value={{ theme: THEMES[currentThemeKey], setThemeMode }}>
       {children}
     </ThemeContext.Provider>
   );
 };
 
+// ОСЬ ЦЕЙ ХУК ВИРІШУЄ ПРОБЛЕМУ З ПОМИЛКОЮ НА ФОТО:
 export const useAppTheme = () => useContext(ThemeContext);

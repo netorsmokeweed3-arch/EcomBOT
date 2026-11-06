@@ -1,6 +1,10 @@
+
+// src/components/HistoryScreen.tsx
 import React from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { Order } from '../types/order';
+import { useAppTheme } from '../theme/ThemeContext';
+import { GlassCard } from '../components/GlassCard';
 
 interface HistoryScreenProps {
   completedOrders: Order[];
@@ -8,6 +12,8 @@ interface HistoryScreenProps {
 }
 
 export const HistoryScreen: React.FC<HistoryScreenProps> = ({ completedOrders, onDeleteOrder }) => {
+  const { theme } = useAppTheme();
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -31,37 +37,45 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({ completedOrders, o
     const formattedDate = formatDate(item.createdAt || item.created_at);
 
     return (
-      <View style={styles.card}>
+      <GlassCard style={styles.glassCardWrapper}>
         <View style={styles.row}>
-          <Text style={styles.orderNumber}>#{item.orderNumber || item.order_number || item.id}</Text>
-          <Text style={styles.price}>{formattedAmount}</Text>
+          <Text style={[styles.orderNumber, { color: theme.textPrimary }]}>
+            #{item.orderNumber || item.order_number || item.id}
+          </Text>
+          <Text style={[styles.price, { color: theme.primary }]}>{formattedAmount}</Text>
         </View>
 
-        <Text style={styles.text} numberOfLines={1}>👤 {item.customerName || item.customer_name || 'Клієнт'}</Text>
+        <Text style={[styles.text, { color: theme.textSecondary }]} numberOfLines={1}>
+          Клієнт: {item.customerName || item.customer_name || 'Не вказано'}
+        </Text>
 
         {formattedDate ? (
-          <Text style={styles.dateText}>📅 {formattedDate}</Text>
+          <Text style={[styles.dateText, { color: theme.textSecondary }]}>Дата: {formattedDate}</Text>
         ) : null}
 
         <View style={styles.row}>
-          <Text style={styles.badge}>Виконано</Text>
+          <View style={[styles.badge, { backgroundColor: 'rgba(52, 199, 89, 0.15)', borderColor: 'rgba(52, 199, 89, 0.3)', borderWidth: 1 }]}>
+            <Text style={[styles.badgeText, { color: theme.accentGain }]}>Виконано</Text>
+          </View>
           {onDeleteOrder && (
             <TouchableOpacity onPress={() => Alert.alert('Видалення', 'Видалити замовлення з історії?', [
               { text: 'Ні', style: 'cancel' },
               { text: 'Так', style: 'destructive', onPress: () => onDeleteOrder(item.id) },
-            ])}>
+            ])} activeOpacity={0.85}>
               <Text style={styles.deleteText}>Видалити</Text>
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </GlassCard>
     );
   };
 
   return (
     <View style={styles.container}>
       {completedOrders.length === 0 ? (
-        <Text style={styles.empty}>Історія замовлень у цьому періоді порожня 📭</Text>
+        <GlassCard style={styles.glassCardWrapper}>
+          <Text style={[styles.empty, { color: theme.textSecondary }]}>Історія замовлень у цьому періоді порожня.</Text>
+        </GlassCard>
       ) : (
         <FlatList
           data={completedOrders}
@@ -77,13 +91,14 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({ completedOrders, o
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  card: { backgroundColor: '#FFF', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E5E5EA' },
+  glassCardWrapper: { marginBottom: 10 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 },
-  orderNumber: { fontSize: 13, fontWeight: '700', color: '#1C1C1E' },
-  price: { fontSize: 13, fontWeight: '700', color: '#007AFF' },
-  text: { fontSize: 12, color: '#3A3A3C', marginVertical: 2 },
-  dateText: { fontSize: 11, color: '#8E8E93', marginBottom: 4, fontWeight: '500' },
-  badge: { fontSize: 10, color: '#2E7D32', backgroundColor: '#E8F5E9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, fontWeight: '600' },
-  deleteText: { fontSize: 11, color: '#FF3B30', fontWeight: '600' },
-  empty: { textAlign: 'center', color: '#8E8E93', fontSize: 13, marginTop: 15 },
+  orderNumber: { fontSize: 13, fontWeight: '700' },
+  price: { fontSize: 13, fontWeight: '700' },
+  text: { fontSize: 12, marginVertical: 2 },
+  dateText: { fontSize: 11, marginBottom: 4, fontWeight: '500' },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  deleteText: { fontSize: 11, color: '#FF3B30', fontWeight: '700' },
+  empty: { textAlign: 'center', fontSize: 13, marginVertical: 10 },
 });

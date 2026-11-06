@@ -1,5 +1,8 @@
+// src/components/CurrencyAnalyticsModal.tsx
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import { useAppTheme } from '../theme/ThemeContext';
+import { GlassCard } from '../components/GlassCard';
 
 interface CurrencyAnalyticsModalProps {
   visible: boolean;
@@ -32,6 +35,7 @@ const INITIAL_CURRENCIES: Record<CurrencyCode, CurrencyData> = {
 };
 
 export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAnalyticsModalProps) {
+  const { theme } = useAppTheme();
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('Тиждень');
   const [currencies, setCurrencies] = useState<Record<CurrencyCode, CurrencyData>>(INITIAL_CURRENCIES);
@@ -82,7 +86,7 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
 
   const currInfo = currencies[selectedCurrency];
 
-  // Генерація трендів із повним роком поспіль та українськими мітками
+  // Генерація трендів
   useEffect(() => {
     const baseRate = currInfo.nbuRate;
     let points: { label: string; value: number }[] = [];
@@ -115,7 +119,7 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
         { label: 'Жовт', value: Number((baseRate - 0.10).toFixed(2)) },
         { label: 'Лист', value: Number(baseRate.toFixed(2)) },
       ];
-    } else { // Рік — повний правильний цикл від грудня до листопада
+    } else {
       points = [
         { label: 'Груд', value: Number((baseRate - 4.20).toFixed(2)) },
         { label: 'Січ', value: Number((baseRate - 3.80).toFixed(2)) },
@@ -138,32 +142,32 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
       <SafeAreaView style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { backgroundColor: theme.bgDark }]}>
           
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { backgroundColor: theme.cardBg, borderBottomColor: theme.cardBorder }]}>
             <View>
-              <Text style={styles.modalTitle}>💱 Курс обміну валют на сьогодні</Text>
-              <Text style={styles.modalSub}>Офіційні дані НБУ та банків • Деталізація</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Курс обміну валют</Text>
+              <Text style={[styles.modalSub, { color: theme.textSecondary }]}>Офіційні дані НБУ та банків</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
+            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+              <Text style={[styles.closeBtnText, { color: theme.textPrimary }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             
-            {/* Таблиця банківських курсів із вирівняними прапорцями */}
-            <View style={styles.card}>
+            {/* Таблиця банківських курсів */}
+            <GlassCard style={styles.card}>
               <View style={styles.cardTitleRow}>
-                <Text style={styles.sectionHeaderTitle}>📊 Середній курс валют в банках та НБУ</Text>
-                {isLoading && <ActivityIndicator size="small" color="#007aff" />}
+                <Text style={[styles.sectionHeaderTitle, { color: theme.textPrimary }]}>Курс валют в банках та НБУ</Text>
+                {isLoading && <ActivityIndicator size="small" color={theme.primary} />}
               </View>
               
-              <View style={styles.tableHeaderRow}>
-                <Text style={[styles.th, { flex: 2, textAlign: 'left' }]}>Валюта</Text>
-                <Text style={styles.th}>Купівля</Text>
-                <Text style={styles.th}>Продаж</Text>
-                <Text style={styles.th}>Курс НБУ</Text>
+              <View style={[styles.tableHeaderRow, { borderBottomColor: theme.cardBorder }]}>
+                <Text style={[styles.th, { flex: 2, textAlign: 'left', color: theme.textSecondary }]}>Валюта</Text>
+                <Text style={[styles.th, { color: theme.textSecondary }]}>Купівля</Text>
+                <Text style={[styles.th, { color: theme.textSecondary }]}>Продаж</Text>
+                <Text style={[styles.th, { color: theme.textSecondary }]}>Курс НБУ</Text>
               </View>
 
               {(Object.keys(currencies) as CurrencyCode[]).map((code) => {
@@ -172,38 +176,36 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
                 return (
                   <TouchableOpacity 
                     key={code} 
-                    style={[styles.tableRow, isSelected && styles.selectedTableRow]}
+                    style={[styles.tableRow, { borderBottomColor: theme.cardBorder }, isSelected && { backgroundColor: 'rgba(0,122,255,0.15)', borderColor: theme.primary, borderWidth: 1 }]} 
                     onPress={() => setSelectedCurrency(code)}
+                    activeOpacity={0.8}
                   >
                     <View style={[styles.td, { flex: 2, flexDirection: 'row', alignItems: 'center' }]}>
                       <View style={styles.flagContainer}>
                         <Text style={{ fontSize: 18, textAlign: 'center' }}>{item.flag}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.currCodeText}>{code}</Text>
-                        <Text style={styles.currNameText} numberOfLines={1}>{item.name}</Text>
+                        <Text style={[styles.currCodeText, { color: theme.textPrimary }]}>{code}</Text>
+                        <Text style={[styles.currNameText, { color: theme.textSecondary }]} numberOfLines={1}>{item.name}</Text>
                       </View>
                     </View>
 
-                    {/* Купівля зі стрілочкою */}
                     <View style={styles.tdCol}>
-                      <Text style={styles.tdValue}>{item.buyBank.toFixed(5)}</Text>
+                      <Text style={[styles.tdValue, { color: theme.textPrimary }]}>{item.buyBank.toFixed(4)}</Text>
                       <Text style={[styles.subChange, { color: item.buyChange >= 0 ? '#34c759' : '#ff3b30' }]}>
                         {item.buyChange >= 0 ? '▲' : '▼'} {Math.abs(item.buyChange).toFixed(2)}
                       </Text>
                     </View>
 
-                    {/* Продаж зі стрілочкою */}
                     <View style={styles.tdCol}>
-                      <Text style={styles.tdValueSell}>{item.sellBank.toFixed(5)}</Text>
+                      <Text style={[styles.tdValueSell, { color: '#ff3b30' }]}>{item.sellBank.toFixed(4)}</Text>
                       <Text style={[styles.subChange, { color: item.sellChange >= 0 ? '#34c759' : '#ff3b30' }]}>
                         {item.sellChange >= 0 ? '▲' : '▼'} {Math.abs(item.sellChange).toFixed(2)}
                       </Text>
                     </View>
 
-                    {/* Курс НБУ зі стрілочкою */}
                     <View style={styles.tdCol}>
-                      <Text style={styles.tdValueNbu}>{item.nbuRate.toFixed(4)}</Text>
+                      <Text style={[styles.tdValueNbu, { color: theme.primary }]}>{item.nbuRate.toFixed(4)}</Text>
                       <Text style={[styles.subChange, { color: item.nbuChange >= 0 ? '#34c759' : '#ff3b30' }]}>
                         {item.nbuChange >= 0 ? '▲' : '▼'} {Math.abs(item.nbuChange).toFixed(2)}
                       </Text>
@@ -211,47 +213,49 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </GlassCard>
 
             {/* Готівковий курс */}
-            <View style={styles.card}>
-              <Text style={styles.sectionHeaderTitle}>💵 Готівковий курс в касах ({selectedCurrency} {currInfo.flag})</Text>
+            <GlassCard style={styles.card}>
+              <Text style={[styles.sectionHeaderTitle, { color: theme.textPrimary }]}>Готівковий курс в касах ({selectedCurrency} {currInfo.flag})</Text>
               <View style={styles.cashRow}>
                 <View style={styles.cashBox}>
-                  <Text style={styles.cashLabel}>Купівля</Text>
-                  <Text style={styles.cashVal}>{currInfo.cashBuy.toFixed(2)} грн</Text>
+                  <Text style={[styles.cashLabel, { color: theme.textSecondary }]}>Купівля</Text>
+                  <Text style={[styles.cashVal, { color: '#34c759' }]}>{currInfo.cashBuy.toFixed(2)} грн</Text>
                 </View>
-                <View style={[styles.cashBox, { borderLeftWidth: 1, borderLeftColor: '#e5e5ea' }]}>
-                  <Text style={styles.cashLabel}>Продаж</Text>
+                <View style={[styles.cashBox, { borderLeftWidth: 1, borderLeftColor: theme.cardBorder }]}>
+                  <Text style={[styles.cashLabel, { color: theme.textSecondary }]}>Продаж</Text>
                   <Text style={[styles.cashVal, { color: '#ff3b30' }]}>{currInfo.cashSell.toFixed(2)} грн</Text>
                 </View>
               </View>
-            </View>
+            </GlassCard>
 
             {/* Графік динаміки */}
-            <View style={styles.card}>
+            <GlassCard style={styles.card}>
               <View style={styles.chartTopRow}>
-                <Text style={styles.sectionHeaderTitle}>📈 Динаміка середнього курсу: {currInfo.name}</Text>
-                <Text style={styles.activeCurrBadge}>{selectedCurrency} {currInfo.flag}</Text>
+                <Text style={[styles.sectionHeaderTitle, { color: theme.textPrimary }]}>Динаміка: {currInfo.name}</Text>
+                <Text style={[styles.activeCurrBadge, { color: theme.primary, backgroundColor: 'rgba(0,122,255,0.2)' }]}>{selectedCurrency} {currInfo.flag}</Text>
               </View>
 
-              <View style={styles.periodsRow}>
+              <View style={[styles.periodsRow, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
                 {(['Тиждень', 'Місяць', 'Квартал', 'Рік'] as const).map((period) => (
                   <TouchableOpacity
                     key={period}
-                    style={[styles.periodChip, selectedPeriod === period && styles.activePeriodChip]}
+                    style={[styles.periodChip, selectedPeriod === period && { backgroundColor: theme.cardBg }]}
                     onPress={() => setSelectedPeriod(period)}
                   >
-                    <Text style={[styles.periodChipText, selectedPeriod === period && styles.activePeriodChipText]}>
+                    <Text style={[styles.periodChipText, { color: theme.textSecondary }, selectedPeriod === period && { color: theme.primary, fontWeight: '700' }]}>
                       {period}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <View style={styles.chartContainer}>
+              <View style={[styles.chartContainer, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
                 <View style={styles.chartGridLines}>
-                  <View style={styles.gridLine} /><View style={styles.gridLine} /><View style={styles.gridLine} />
+                  <View style={[styles.gridLine, { backgroundColor: theme.cardBorder }]} />
+                  <View style={[styles.gridLine, { backgroundColor: theme.cardBorder }]} />
+                  <View style={[styles.gridLine, { backgroundColor: theme.cardBorder }]} />
                 </View>
                 <View style={styles.chartPointsRow}>
                   {chartData.map((pt, idx) => {
@@ -262,20 +266,20 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
                     return (
                       <View key={idx} style={styles.chartColumn}>
                         <View style={styles.barWrapper}>
-                          <View style={[styles.activeBarLine, { height: `${heightPercent}%` }]} />
-                          <View style={styles.pointIndicator} />
+                          <View style={[styles.activeBarLine, { height: `${heightPercent}%`, backgroundColor: theme.primary + '40' }]} />
+                          <View style={[styles.pointIndicator, { backgroundColor: theme.primary, borderColor: theme.cardBg }]} />
                         </View>
-                        <Text style={styles.chartPointLabel} numberOfLines={1}>{pt.label}</Text>
-                        <Text style={styles.chartPointVal}>{pt.value}</Text>
+                        <Text style={[styles.chartPointLabel, { color: theme.textSecondary }]} numberOfLines={1}>{pt.label}</Text>
+                        <Text style={[styles.chartPointVal, { color: theme.textPrimary }]}>{pt.value}</Text>
                       </View>
                     );
                   })}
                 </View>
               </View>
-            </View>
+            </GlassCard>
 
-            <TouchableOpacity style={styles.doneBtn} onPress={onClose}>
-              <Text style={styles.doneBtnText}>Зрозуміло, згорнути</Text>
+            <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={onClose} activeOpacity={0.85}>
+              <Text style={[styles.doneBtnText, { color: '#070907' }]}>Зрозуміло, згорнути</Text>
             </TouchableOpacity>
 
           </ScrollView>
@@ -286,51 +290,48 @@ export default function CurrencyAnalyticsModal({ visible, onClose }: CurrencyAna
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: '#f2f2f7', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%', paddingBottom: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#ffffff', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomWidth: 1, borderBottomColor: '#e5e5ea' },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: '#1c1c1e' },
-  modalSub: { fontSize: 11, color: '#8e8e93', marginTop: 2 },
-  closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#f2f2f7', justifyContent: 'center', alignItems: 'center' },
-  closeBtnText: { fontSize: 14, fontWeight: '700', color: '#3a3a3c' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContainer: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%', paddingBottom: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomWidth: 1 },
+  modalTitle: { fontSize: 16, fontWeight: '700' },
+  modalSub: { fontSize: 11, marginTop: 2 },
+  closeBtn: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  closeBtnText: { fontSize: 14, fontWeight: '700' },
   scrollContent: { padding: 12, gap: 12 },
-  card: { backgroundColor: '#ffffff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#e5e5ea' },
+  card: { marginBottom: 0 },
   cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  sectionHeaderTitle: { fontSize: 13, fontWeight: '700', color: '#1c1c1e', marginBottom: 8 },
-  tableHeaderRow: { flexDirection: 'row', paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f2f2f7', marginBottom: 4 },
-  th: { fontSize: 10, fontWeight: '600', color: '#8e8e93', textAlign: 'center', flex: 1 },
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f9f9fb', borderRadius: 6, paddingHorizontal: 4 },
-  selectedTableRow: { backgroundColor: '#f0f8ff', borderColor: '#007aff' },
+  sectionHeaderTitle: { fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  tableHeaderRow: { flexDirection: 'row', paddingBottom: 6, borderBottomWidth: 1, marginBottom: 4 },
+  th: { fontSize: 10, fontWeight: '600', textAlign: 'center', flex: 1 },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderRadius: 6, paddingHorizontal: 4 },
   td: { justifyContent: 'center' },
   flagContainer: { width: 32, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
   tdCol: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  currCodeText: { fontSize: 13, fontWeight: '700', color: '#1c1c1e' },
-  currNameText: { fontSize: 10, color: '#8e8e93' },
-  tdValue: { fontSize: 11, fontWeight: '700', color: '#1c1c1e', textAlign: 'center' },
-  tdValueSell: { fontSize: 11, fontWeight: '700', color: '#ff3b30', textAlign: 'center' },
-  tdValueNbu: { fontSize: 11, fontWeight: '700', color: '#007aff', textAlign: 'center' },
+  currCodeText: { fontSize: 13, fontWeight: '700' },
+  currNameText: { fontSize: 10 },
+  tdValue: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  tdValueSell: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  tdValueNbu: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
   subChange: { fontSize: 9, fontWeight: '600', marginTop: 2, textAlign: 'center' },
   cashRow: { flexDirection: 'row', paddingTop: 4 },
   cashBox: { flex: 1, alignItems: 'center', paddingVertical: 6 },
-  cashLabel: { fontSize: 11, color: '#8e8e93', marginBottom: 2 },
-  cashVal: { fontSize: 15, fontWeight: '700', color: '#34c759' },
+  cashLabel: { fontSize: 11, marginBottom: 2 },
+  cashVal: { fontSize: 15, fontWeight: '700' },
   chartTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  activeCurrBadge: { fontSize: 11, fontWeight: '700', color: '#007aff', backgroundColor: '#007aff20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  periodsRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#f2f2f7', borderRadius: 8, padding: 3, marginBottom: 12 },
+  activeCurrBadge: { fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  periodsRow: { flexDirection: 'row', justifyContent: 'space-between', borderRadius: 8, padding: 3, marginBottom: 12 },
   periodChip: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 6 },
-  activePeriodChip: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  periodChipText: { fontSize: 11, fontWeight: '600', color: '#8e8e93' },
-  activePeriodChipText: { color: '#007aff', fontWeight: '700' },
-  chartContainer: { height: 150, backgroundColor: '#fafafc', borderRadius: 8, padding: 10, justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' },
+  periodChipText: { fontSize: 11, fontWeight: '600' },
+  chartContainer: { height: 150, borderRadius: 8, padding: 10, justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' },
   chartGridLines: { position: 'absolute', top: 10, left: 10, right: 10, bottom: 35, justifyContent: 'space-between' },
-  gridLine: { height: 1, backgroundColor: '#e5e5ea', width: '100%' },
+  gridLine: { height: 1, width: '100%' },
   chartPointsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', zIndex: 2, height: '100%', paddingTop: 10 },
   chartColumn: { alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' },
   barWrapper: { width: '100%', alignItems: 'center', justifyContent: 'flex-end', height: 80, position: 'relative' },
-  activeBarLine: { width: 3, backgroundColor: '#007aff30', position: 'absolute', bottom: 4, borderRadius: 2 },
-  pointIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#007aff', marginBottom: 4, zIndex: 3, borderWidth: 1.5, borderColor: '#ffffff' },
-  chartPointLabel: { fontSize: 9, color: '#8e8e93', marginBottom: 2, textAlign: 'center' },
-  chartPointVal: { fontSize: 9, fontWeight: '700', color: '#1c1c1e', textAlign: 'center' },
-  doneBtn: { backgroundColor: '#007aff', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 4 },
-  doneBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  activeBarLine: { width: 3, position: 'absolute', bottom: 4, borderRadius: 2 },
+  pointIndicator: { width: 8, height: 8, borderRadius: 4, marginBottom: 4, zIndex: 3, borderWidth: 1.5 },
+  chartPointLabel: { fontSize: 9, marginBottom: 2, textAlign: 'center' },
+  chartPointVal: { fontSize: 9, fontWeight: '700', textAlign: 'center' },
+  doneBtn: { padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 4 },
+  doneBtnText: { fontSize: 15, fontWeight: '800' },
 });

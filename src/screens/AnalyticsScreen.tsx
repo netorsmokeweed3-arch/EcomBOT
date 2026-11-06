@@ -1,12 +1,13 @@
+// src/screens/AnalyticsScreen.tsx
 import React, { useMemo, memo, useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View, TouchableOpacity, Alert, Modal, SafeAreaView, FlatList, Clipboard, StatusBar } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { Order } from '../types/order';
 import { HistoryScreen } from './HistoryScreen';
 import { orderStore } from '../services/orderStore';
 import CurrencyAnalyticsModal from './CurrencyAnalyticsModal';
 import { useAppTheme } from '../theme/ThemeContext';
 import { AuraHeader } from '../components/AuraHeader';
+import { GlassCard } from '../components/GlassCard';
 
 type PeriodType = 'days' | 'weeks' | 'months' | 'year' | 'all';
 type CurrencyType = 'UAH' | 'USD' | 'EUR' | 'GBP';
@@ -31,7 +32,6 @@ const MARKET_RATES: Record<CurrencyType, { buy: number; sell: number; rate: numb
 
 function AnalyticsScreen() {
   const { theme } = useAppTheme();
-  const navigation = useNavigation<any>();
 
   const [completedOrders, setCompletedOrders] = useState<Order[]>(() => {
     try {
@@ -48,7 +48,6 @@ function AnalyticsScreen() {
   const [isDetailedCurrencyModalVisible, setIsDetailedCurrencyModalVisible] = useState<boolean>(false);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
 
-  // Підписка на сховище замовлень
   useEffect(() => {
     let isMounted = true;
     const unsubscribe = orderStore.subscribe(() => {
@@ -77,7 +76,6 @@ function AnalyticsScreen() {
   const [periodType, setPeriodType] = useState<PeriodType>('all');
   const [periodCount, setPeriodCount] = useState<number>(1);
 
-  // Календарна фільтрація
   const filteredOrders = useMemo(() => {
     if (!Array.isArray(completedOrders)) return [];
     if (periodType === 'all') return completedOrders;
@@ -111,7 +109,6 @@ function AnalyticsScreen() {
     });
   }, [completedOrders, periodType, periodCount]);
 
-  // Фінансовий розрахунок
   const stats = useMemo(() => {
     const totalOrders = filteredOrders.length;
     let totalRevenueUah = 0;
@@ -167,7 +164,7 @@ function AnalyticsScreen() {
     const conversionRate = completedOrders.length > 0 ? ((totalOrders / completedOrders.length) * 100).toFixed(0) : '100';
     const trendPercentage = totalOrders > 5 ? '+21.0%' : totalOrders > 0 ? '+7.5%' : '0.0%';
     const isPositiveTrend = totalOrders > 0;
-    const businessHealth = totalOrders > 3 ? 'Висока активність 🟢' : totalOrders > 0 ? 'Стабільний робітний стан 🟡' : 'Очікування транзакцій ⚪️';
+    const businessHealth = totalOrders > 3 ? 'Висока активність' : totalOrders > 0 ? 'Стабільний робочий стан' : 'Очікування транзакцій';
 
     const periodLabel = periodType === 'all' ? 'Всі періоди' : `${periodCount} ${periodType}`;
 
@@ -190,7 +187,7 @@ function AnalyticsScreen() {
   const handleExportAndSaveReport = () => {
     const nowStr = new Date().toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     
-    const reportText = `📊 ФІНАНСОВИЙ ЗВІТ МАГАЗИНУ\n📅 Дата: ${nowStr}\n⏱ Період: ${stats.periodLabel}\n🌐 Валюта: ${currentCurrency} (${stats.symbol})\n----------------------------------\n📦 Успішних замовлень: ${stats.totalOrders}\n💰 Загальний дохід: ${stats.totalRevenue} ${stats.symbol}\n📈 Середній чек: ${stats.averageCheck} ${stats.symbol}\n🚀 Піковий чек: ${stats.maxCheck} ${stats.symbol}\n⚡️ Ефективність: ${stats.conversionRate}%\n----------------------------------\nСтатус бізнесу: ${stats.businessHealth}`;
+    const reportText = `ФІНАНСОВИЙ ЗВІТ МАГАЗИНУ\nДата: ${nowStr}\nПеріод: ${stats.periodLabel}\nВалюта: ${currentCurrency} (${stats.symbol})\n----------------------------------\nУспішних замовлень: ${stats.totalOrders}\nЗагальний дохід: ${stats.totalRevenue} ${stats.symbol}\nСередній чек: ${stats.averageCheck} ${stats.symbol}\nПіковий чек: ${stats.maxCheck} ${stats.symbol}\nЕфективність: ${stats.conversionRate}%\n----------------------------------\nСтатус бізнесу: ${stats.businessHealth}`;
 
     const newReport: SavedReport = {
       id: Date.now().toString(),
@@ -206,12 +203,12 @@ function AnalyticsScreen() {
     setSavedReports((prev) => [newReport, ...prev]);
     Clipboard.setString(reportText);
 
-    Alert.alert('✅ Звіт успішно сформовано!', 'Звіт збережено в «Архів звітів» та автоматично скопійовано у буфер обміну.');
+    Alert.alert('Звіт успішно сформовано', 'Звіт збережено в «Архів звітів» та автоматично скопійовано у буфер обміну.');
   };
 
   const handleCopyReportText = (text: string) => {
     Clipboard.setString(text);
-    Alert.alert('📋 Скопійовано', 'Текст звіту успішно скопійовано в буфер обміну!');
+    Alert.alert('Скопійовано', 'Текст звіту успішно скопійовано в буфер обміну!');
   };
 
   const handleDeleteSavedReport = (id: string) => {
@@ -219,67 +216,48 @@ function AnalyticsScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgDark }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
       
-      {/* Розкішний фоновий градієнт із променями */}
-      <AuraHeader />
-
-      {/* Наш власний преміальний TopBar із кнопкою меню ☰ */}
       <View style={styles.topBar}>
-        <TouchableOpacity 
-          style={[styles.menuBtn, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
-          onPress={() => navigation.openDrawer()}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.menuIcon, { color: theme.textPrimary }]}>☰</Text>
-        </TouchableOpacity>
         <View>
-          <Text style={[styles.topBarTitle, { color: theme.textPrimary }]}>📊 Аналітика та Доходи</Text>
+          <Text style={[styles.topBarTitle, { color: theme.textPrimary }]}>Аналітика та Доходи</Text>
           <Text style={[styles.topBarSub, { color: theme.textSecondary }]}>Мультивалютний корпоративний термінал</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 1. Блок перемикання активної валюти звіту */}
-        <TouchableOpacity 
-          style={[styles.glassCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]} 
-          activeOpacity={0.8}
-          onPress={() => setIsCurrencyModalVisible(true)}
-        >
-          <View style={styles.monitorHeader}>
-            <Text style={[styles.monitorTitle, { color: theme.textPrimary }]}>💱 Валюта звіту та конвертація</Text>
-            <Text style={[styles.monitorAction, { color: theme.primary }]}>Змінити ➔</Text>
-          </View>
-          <Text style={[styles.monitorSub, { color: theme.textSecondary }]}>
-            Активна валюта: <Text style={{fontWeight: '700', color: theme.primary}}>{currentCurrency} ({stats.symbol})</Text>. Натисніть, щоб перевести всю аналітику в USD, EUR, GBP чи UAH.
-          </Text>
-        </TouchableOpacity>
+        <GlassCard style={styles.glassCardWrapper}>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setIsCurrencyModalVisible(true)}>
+            <View style={styles.monitorHeader}>
+              <Text style={[styles.monitorTitle, { color: theme.textPrimary }]}>Валюта звіту та конвертація</Text>
+              <Text style={[styles.monitorAction, { color: theme.primary }]}>Змінити ➔</Text>
+            </View>
+            <Text style={[styles.monitorSub, { color: theme.textSecondary }]}>
+              Активна валюта: <Text style={{fontWeight: '700', color: theme.primary}}>{currentCurrency} ({stats.symbol})</Text>. Натисніть, щоб перевести всю аналітику в USD, EUR, GBP чи UAH.
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
 
-        {/* 2. Кнопка моніторингу курсів валют і графіків */}
-        <TouchableOpacity 
-          style={[styles.glassCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.primary }]} 
-          activeOpacity={0.8}
-          onPress={() => setIsDetailedCurrencyModalVisible(true)}
-        >
-          <View style={styles.monitorHeader}>
-            <Text style={[styles.monitorTitle, { color: theme.primary }]}>📈 Курс обміну валют на сьогодні (Графіки)</Text>
-            <Text style={[styles.monitorAction, { color: theme.primary }]}>Відкрити ➔</Text>
-          </View>
-          <Text style={[styles.monitorSub, { color: theme.textSecondary }]}>
-            Перегляд актуальних курсів НБУ, середніх курсів у банках та динаміки трендів.
-          </Text>
-        </TouchableOpacity>
+        <GlassCard style={styles.glassCardWrapper}>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setIsDetailedCurrencyModalVisible(true)}>
+            <View style={styles.monitorHeader}>
+              <Text style={[styles.monitorTitle, { color: theme.primary }]}>Курс обміну валют на сьогодні (Графіки)</Text>
+              <Text style={[styles.monitorAction, { color: theme.primary }]}>Відкрити ➔</Text>
+            </View>
+            <Text style={[styles.monitorSub, { color: theme.textSecondary }]}>
+              Перегляд актуальних курсів НБУ, середніх курсів у банках та динаміки трендів.
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
 
-        {/* Баннер статусу та кнопки звітів */}
-        <View style={[styles.glassCard, { backgroundColor: 'rgba(18, 22, 32, 0.8)', borderColor: theme.cardBorder }]}>
+        <GlassCard style={styles.glassCardWrapper}>
           <View style={styles.bannerRow}>
-            <Text style={styles.bannerEmoji}>🛡️</Text>
             <View style={styles.bannerTextContainer}>
               <View style={styles.bannerTitleRow}>
                 <Text style={[styles.bannerTitle, { color: theme.textPrimary }]}>Статус: {stats.businessHealth}</Text>
-                <View style={[styles.trendBadge, stats.isPositiveTrend ? styles.trendGreen : { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-                  <Text style={[styles.trendText, { color: stats.isPositiveTrend ? theme.accentGain : theme.textSecondary }]}>{stats.trendPercentage} 📈</Text>
+                <View style={[styles.trendBadge, stats.isPositiveTrend ? styles.trendGreen : { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+                  <Text style={[styles.trendText, { color: stats.isPositiveTrend ? theme.accentGain : theme.textSecondary }]}>{stats.trendPercentage}</Text>
                 </View>
               </View>
               <Text style={[styles.bannerDescription, { color: theme.textSecondary }]}>
@@ -291,18 +269,17 @@ function AnalyticsScreen() {
           </View>
 
           <View style={styles.reportButtonsRow}>
-            <TouchableOpacity style={[styles.exportBtn, { flex: 1, backgroundColor: theme.primary }]} onPress={handleExportAndSaveReport} activeOpacity={0.8}>
-              <Text style={[styles.exportBtnText, { color: theme.bgDark }]}>📥 Експортувати звіт</Text>
+            <TouchableOpacity style={[styles.exportBtn, { flex: 1, backgroundColor: theme.primary }]} onPress={handleExportAndSaveReport} activeOpacity={0.85}>
+              <Text style={[styles.exportBtnText, { color: '#070907' }]}>Експортувати звіт</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.archiveBtn, { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }]} onPress={() => setIsReportsModalVisible(true)} activeOpacity={0.8}>
-              <Text style={[styles.archiveBtnText, { color: theme.textPrimary }]}>📂 Архів звітів ({savedReports.length})</Text>
+            <TouchableOpacity style={[styles.archiveBtn, { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)' }]} onPress={() => setIsReportsModalVisible(true)} activeOpacity={0.85}>
+              <Text style={[styles.archiveBtnText, { color: theme.textPrimary }]}>Архів звітів ({savedReports.length})</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </GlassCard>
 
-        {/* Панель вибору періодів */}
-        <View style={[styles.filterContainer, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
+        <GlassCard style={styles.glassCardWrapper}>
           <View style={styles.mainTabs}>
             {(['all', 'days', 'weeks', 'months', 'year'] as const).map((type) => (
               <TouchableOpacity
@@ -312,8 +289,9 @@ function AnalyticsScreen() {
                   setPeriodType(type);
                   setPeriodCount(1);
                 }}
+                activeOpacity={0.85}
               >
-                <Text style={[styles.tabText, { color: theme.textSecondary }, periodType === type && { color: theme.bgDark, fontWeight: '800' }]}>
+                <Text style={[styles.tabText, { color: theme.textSecondary }, periodType === type && { color: '#070907', fontWeight: '800' }]}>
                   {type === 'all' ? 'Всі' : type === 'days' ? 'Дні' : type === 'weeks' ? 'Тижні' : type === 'months' ? 'Місяці' : 'Рік'}
                 </Text>
               </TouchableOpacity>
@@ -321,98 +299,92 @@ function AnalyticsScreen() {
           </View>
 
           {periodType !== 'all' && (
-            <View style={[styles.subFilterRow, { borderTopColor: theme.cardBorder }]}>
-              <Text style={[styles.subFilterLabel, { color: theme.textSecondary }]}>
-                Глибина:
-              </Text>
+            <View style={[styles.subFilterRow, { borderTopColor: 'rgba(255,255,255,0.08)' }]}>
+              <Text style={[styles.subFilterLabel, { color: theme.textSecondary }]}>Глибина:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.countScroll}>
                 {[1, 2, 3, 5, 7, 10, 14, 30].map((num) => (
                   <TouchableOpacity
                     key={num}
-                    style={[styles.countChip, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }, periodCount === num && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                    style={[styles.countChip, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)' }, periodCount === num && { backgroundColor: theme.primary, borderColor: theme.primary }]}
                     onPress={() => setPeriodCount(num)}
+                    activeOpacity={0.85}
                   >
-                    <Text style={[styles.countChipText, { color: theme.textPrimary }, periodCount === num && { color: theme.bgDark }]}>{num}</Text>
+                    <Text style={[styles.countChipText, { color: theme.textPrimary }, periodCount === num && { color: '#070907' }]}>{num}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
           )}
-        </View>
+        </GlassCard>
 
-        {/* Сітка бізнес-карток (Glassmorphism) */}
         <View style={styles.grid}>
-          <View style={[styles.card, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-            <Text style={[styles.cardLabel, { color: theme.bgDark, opacity: 0.8 }]}>💰 Загальний дохід</Text>
-            <Text style={[styles.cardValue, { color: theme.bgDark }]}>{stats.totalRevenue} {stats.symbol}</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Загальний дохід</Text>
+            <Text style={[styles.cardValue, { color: theme.primary }]}>{stats.totalRevenue} {stats.symbol}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>📦 Замовлення</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Замовлення</Text>
             <Text style={[styles.cardValueDark, { color: theme.textPrimary }]}>{stats.totalOrders}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>📈 Середній чек</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Середній чек</Text>
             <Text style={[styles.cardValueDark, { color: theme.textPrimary }]}>{stats.averageCheck} {stats.symbol}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>✅ Успішно виконано</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Успішно виконано</Text>
             <Text style={[styles.cardValueGreen, { color: theme.accentGain }]}>{stats.totalOrders}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>🚀 Піковий чек</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Піковий чек</Text>
             <Text style={[styles.cardValueBlue, { color: theme.primary }]}>{stats.maxCheck} {stats.symbol}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>📉 Мінімальний чек</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Мінімальний чек</Text>
             <Text style={[styles.cardValueDark, { color: theme.textPrimary }]}>{stats.minCheck} {stats.symbol}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>⚡ Частка активності</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Частка активності</Text>
             <Text style={[styles.cardValueDark, { color: theme.textPrimary }]}>{stats.conversionRate}%</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>🔮 Прогноз місяця</Text>
+          <View style={[styles.card, { backgroundColor: 'rgba(10, 20, 15, 0.35)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>Прогноз місяця</Text>
             <Text style={[styles.cardValuePurple, { color: theme.primary }]}>{stats.projectedRevenue} {stats.symbol}</Text>
           </View>
         </View>
 
-        {/* Шкала продуктивності */}
-        <View style={[styles.progressContainer, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-          <Text style={[styles.progressTitle, { color: theme.textPrimary }]}>📈 Індекс безпеки та виконання</Text>
-          <View style={[styles.progressBarBackground, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(stats.totalOrders * 10, 100)}%`, backgroundColor: theme.accentGain }]} />
+        <GlassCard style={styles.glassCardWrapper}>
+          <Text style={[styles.progressTitle, { color: theme.textPrimary }]}>Індекс безпеки та виконання</Text>
+          <View style={[styles.progressBarBackground, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+            <View style={[styles.progressBarFill, { width: `${Math.min(stats.totalOrders * 10, 100)}%` as any, backgroundColor: theme.accentGain }]} />
           </View>
           <Text style={[styles.progressSubText, { color: theme.textSecondary }]}>
             {stats.totalOrders > 0 
               ? `Оброблено посилок: ${stats.totalOrders}. Валюта: ${currentCurrency}.` 
               : 'Очікування нових замовлень.'}
           </Text>
-        </View>
+        </GlassCard>
 
-        {/* AI Enterprise Advisor */}
-        <View style={[styles.aiBox, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
-          <Text style={[styles.aiTitle, { color: theme.textPrimary }]}>🤖 AI Enterprise Security & Multi-Currency</Text>
+        <GlassCard style={styles.glassCardWrapper}>
+          <Text style={[styles.aiTitle, { color: theme.textPrimary }]}>AI Enterprise Security & Multi-Currency</Text>
           <Text style={[styles.aiText, { color: theme.textSecondary }]}>
             {stats.totalOrders === 0 
               ? "У вибраному діапазоні немає фінансових даних." 
               : `Мультивалютний конвертер перерахував усі операції у ${currentCurrency}. Натисніть «Експортувати звіт», щоб зберегти зріз.`}
           </Text>
-        </View>
+        </GlassCard>
 
-        {/* Історія замовлень */}
         <View style={styles.historySection}>
-          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>📜 Детальна історія замовлень</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Детальна історія замовлень</Text>
           <HistoryScreen completedOrders={filteredOrders} onDeleteOrder={handleDeleteHistoryOrder} />
         </View>
 
-        {/* Модальне вікно вибору базової валюти */}
         <Modal
           visible={isCurrencyModalVisible}
           animationType="slide"
@@ -420,9 +392,9 @@ function AnalyticsScreen() {
           onRequestClose={() => setIsCurrencyModalVisible(false)}
         >
           <SafeAreaView style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, borderWidth: 1 }]}>
+            <View style={[styles.modalContent, { backgroundColor: '#070907', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 }]}>
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>💱 Вибір валюти звітності</Text>
+                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Вибір валюти звітності</Text>
                 <TouchableOpacity onPress={() => setIsCurrencyModalVisible(false)}>
                   <Text style={[styles.modalCloseText, { color: theme.primary }]}>✕ Закрити</Text>
                 </TouchableOpacity>
@@ -437,11 +409,12 @@ function AnalyticsScreen() {
                   return (
                     <TouchableOpacity
                       key={curr}
-                      style={[styles.rateRow, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }, isSelected && { backgroundColor: theme.primaryGlow, borderColor: theme.primary }]}
+                      style={[styles.rateRow, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)' }, isSelected && { backgroundColor: 'rgba(0,122,255,0.1)', borderColor: theme.primary }]}
                       onPress={() => {
                         setCurrentCurrency(curr);
                         setIsCurrencyModalVisible(false);
                       }}
+                      activeOpacity={0.85}
                     >
                       <View style={styles.rateInfoLeft}>
                         <Text style={[styles.rateCurrencyName, { color: theme.textPrimary }]}>{curr} ({item.symbol})</Text>
@@ -455,20 +428,18 @@ function AnalyticsScreen() {
                 })}
               </View>
 
-              <TouchableOpacity style={[styles.modalDoneBtn, { backgroundColor: theme.primary }]} onPress={() => setIsCurrencyModalVisible(false)}>
-                <Text style={[styles.modalDoneBtnText, { color: theme.bgDark }]}>Готово</Text>
+              <TouchableOpacity style={[styles.modalDoneBtn, { backgroundColor: theme.primary }]} onPress={() => setIsCurrencyModalVisible(false)} activeOpacity={0.85}>
+                <Text style={[styles.modalDoneBtnText, { color: '#070907' }]}>Готово</Text>
               </TouchableOpacity>
             </View>
           </SafeAreaView>
         </Modal>
 
-        {/* Детальне модальне вікно моніторингу курсів та графіків */}
         <CurrencyAnalyticsModal 
           visible={isDetailedCurrencyModalVisible} 
           onClose={() => setIsDetailedCurrencyModalVisible(false)} 
         />
 
-        {/* Модальне вікно: Архів звітів */}
         <Modal
           visible={isReportsModalVisible}
           animationType="slide"
@@ -476,9 +447,9 @@ function AnalyticsScreen() {
           onRequestClose={() => setIsReportsModalVisible(false)}
         >
           <SafeAreaView style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, borderWidth: 1, maxHeight: '85%' }]}>
+            <View style={[styles.modalContent, { backgroundColor: '#070907', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, maxHeight: '85%' }]}>
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>📂 Архів експортованих звітів</Text>
+                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Архів експортованих звітів</Text>
                 <TouchableOpacity onPress={() => setIsReportsModalVisible(false)}>
                   <Text style={[styles.modalCloseText, { color: theme.primary }]}>✕ Закрити</Text>
                 </TouchableOpacity>
@@ -489,17 +460,17 @@ function AnalyticsScreen() {
               </Text>
 
               {savedReports.length === 0 ? (
-                <Text style={[styles.emptyReportsText, { color: theme.textSecondary }]}>Архів звітів порожній 📭</Text>
+                <Text style={[styles.emptyReportsText, { color: theme.textSecondary }]}>Архів звітів порожній.</Text>
               ) : (
                 <FlatList
                   data={savedReports}
                   keyExtractor={(item) => item.id}
                   showsVerticalScrollIndicator={false}
                   renderItem={({ item }) => (
-                    <View style={[styles.reportCard, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: theme.cardBorder }]}>
+                    <View style={[styles.reportCard, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)' }]}>
                       <View style={styles.reportCardHeader}>
-                        <Text style={[styles.reportDateText, { color: theme.textPrimary }]}>📅 {item.date}</Text>
-                        <Text style={[styles.reportCurrBadge, { color: theme.primary, backgroundColor: theme.primaryGlow }]}>{item.currency}</Text>
+                        <Text style={[styles.reportDateText, { color: theme.textPrimary }]}>{item.date}</Text>
+                        <Text style={[styles.reportCurrBadge, { color: theme.primary, backgroundColor: 'rgba(0,122,255,0.1)' }]}>{item.currency}</Text>
                       </View>
                       <Text style={[styles.reportDetailsText, { color: theme.textSecondary }]}>Період: {item.periodText} | Замовлень: {item.totalOrders}</Text>
                       <Text style={[styles.reportRevenueText, { color: theme.accentGain }]}>Дохід: {item.totalRevenue} ({item.currency})</Text>
@@ -508,13 +479,15 @@ function AnalyticsScreen() {
                         <TouchableOpacity 
                           style={[styles.reportCopyBtn, { backgroundColor: theme.primary }]} 
                           onPress={() => handleCopyReportText(item.rawText)}
+                          activeOpacity={0.85}
                         >
-                          <Text style={[styles.reportCopyBtnText, { color: theme.bgDark }]}>📋 Копіювати в буфер</Text>
+                          <Text style={[styles.reportCopyBtnText, { color: '#070907' }]}>Копіювати в буфер</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity 
                           style={styles.reportDeleteBtn} 
                           onPress={() => handleDeleteSavedReport(item.id)}
+                          activeOpacity={0.85}
                         >
                           <Text style={styles.reportDeleteBtnText}>Видалити</Text>
                         </TouchableOpacity>
@@ -524,8 +497,8 @@ function AnalyticsScreen() {
                 />
               )}
 
-              <TouchableOpacity style={[styles.modalDoneBtn, { backgroundColor: theme.primary, marginTop: 12 }]} onPress={() => setIsReportsModalVisible(false)}>
-                <Text style={[styles.modalDoneBtnText, { color: theme.bgDark }]}>Закрити архів</Text>
+              <TouchableOpacity style={[styles.modalDoneBtn, { backgroundColor: theme.primary, marginTop: 12 }]} onPress={() => setIsReportsModalVisible(false)} activeOpacity={0.85}>
+                <Text style={[styles.modalDoneBtnText, { color: '#070907' }]}>Закрити архів</Text>
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -538,58 +511,17 @@ function AnalyticsScreen() {
 export default memo(AnalyticsScreen);
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 45,
-    paddingBottom: 12,
-    zIndex: 10,
-  },
-  menuBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    marginRight: 12,
-  },
-  menuIcon: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  topBarTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  topBarSub: {
-    fontSize: 11,
-  },
-
-  content: { padding: 12, paddingBottom: 28, zIndex: 1 },
-  
-  glassCard: { 
-    borderRadius: 16, 
-    padding: 14, 
-    marginBottom: 12, 
-    borderWidth: 1, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 10 }, 
-    shadowOpacity: 0.3, 
-    shadowRadius: 15, 
-    elevation: 6 
-  },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  topBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, zIndex: 10 },
+  topBarTitle: { fontSize: 17, fontWeight: '800', letterSpacing: 0.3 },
+  topBarSub: { fontSize: 11 },
+  content: { padding: 12, paddingBottom: 90, zIndex: 1 },
+  glassCardWrapper: { marginBottom: 12 },
   monitorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   monitorTitle: { fontSize: 13, fontWeight: '700' },
   monitorAction: { fontSize: 12, fontWeight: '700' },
   monitorSub: { fontSize: 11, lineHeight: 15 },
-  
   bannerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  bannerEmoji: { fontSize: 28, marginRight: 12 },
   bannerTextContainer: { flex: 1 },
   bannerTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   bannerTitle: { fontSize: 13, fontWeight: '700' },
@@ -597,23 +529,19 @@ const styles = StyleSheet.create({
   trendGreen: { backgroundColor: 'rgba(52, 199, 89, 0.15)' },
   trendText: { fontSize: 11, fontWeight: '700' },
   bannerDescription: { fontSize: 12, lineHeight: 16 },
-  
   reportButtonsRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   exportBtn: { paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, alignItems: 'center' },
   exportBtnText: { fontSize: 12, fontWeight: '700' },
   archiveBtn: { paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
   archiveBtnText: { fontSize: 12, fontWeight: '600' },
-  
-  filterContainer: { borderRadius: 12, padding: 10, marginBottom: 12, borderWidth: 1 },
   mainTabs: { flexDirection: 'row', justifyContent: 'space-between', gap: 4 },
-  tab: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.05)' },
+  tab: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.04)' },
   tabText: { fontSize: 11, fontWeight: '600' },
   subFilterRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', paddingTop: 6, borderTopWidth: 1 },
   subFilterLabel: { fontSize: 11, fontWeight: '600', marginRight: 8 },
   countScroll: { flexDirection: 'row', gap: 4, alignItems: 'center' },
   countChip: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   countChipText: { fontSize: 11, fontWeight: '700' },
-  
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, marginBottom: 12 },
   card: { width: '48%', borderRadius: 12, padding: 12, borderWidth: 1 },
   cardLabel: { fontSize: 10, fontWeight: '600', marginBottom: 4 },
@@ -622,27 +550,20 @@ const styles = StyleSheet.create({
   cardValueGreen: { fontSize: 16, fontWeight: '800' },
   cardValueBlue: { fontSize: 16, fontWeight: '800' },
   cardValuePurple: { fontSize: 16, fontWeight: '800' },
-  
-  progressContainer: { borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1 },
   progressTitle: { fontSize: 13, fontWeight: '700', marginBottom: 8 },
   progressBarBackground: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 6 },
   progressBarFill: { height: '100%', borderRadius: 4 },
   progressSubText: { fontSize: 11 },
-  
-  aiBox: { borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1 },
   aiTitle: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
   aiText: { fontSize: 12, lineHeight: 16 },
-  
   historySection: { marginTop: 4 },
   sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   modalTitle: { fontSize: 18, fontWeight: '700' },
   modalCloseText: { fontSize: 14, fontWeight: '700' },
   modalSubText: { fontSize: 13, lineHeight: 18, marginBottom: 16 },
-  
   ratesTableContainer: { gap: 8, marginBottom: 20 },
   rateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1 },
   rateInfoLeft: { flex: 1 },
@@ -651,20 +572,18 @@ const styles = StyleSheet.create({
   rateInfoRight: { alignItems: 'flex-end' },
   selectedBadge: { fontSize: 12, fontWeight: '700' },
   selectText: { fontSize: 12, fontWeight: '600' },
-  
-  modalDoneBtn: { padding: 14, borderRadius: 12, alignItems: 'center' },
-  modalDoneBtnText: { fontSize: 16, fontWeight: '800' },
-  
-  emptyReportsText: { textAlign: 'center', fontSize: 14, marginVertical: 30 },
-  reportCard: { borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1 },
+  modalDoneBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  modalDoneBtnText: { fontSize: 15, fontWeight: '700' },
+  emptyReportsText: { textAlign: 'center', marginVertical: 20, fontSize: 14 },
+  reportCard: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
   reportCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   reportDateText: { fontSize: 12, fontWeight: '700' },
-  reportCurrBadge: { fontSize: 10, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  reportDetailsText: { fontSize: 11, marginBottom: 2 },
-  reportRevenueText: { fontSize: 13, fontWeight: '800', marginBottom: 8 },
+  reportCurrBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, fontSize: 10, fontWeight: '700' },
+  reportDetailsText: { fontSize: 12 },
+  reportRevenueText: { fontSize: 13, fontWeight: '700', marginTop: 2, marginBottom: 8 },
   reportActionsRow: { flexDirection: 'row', gap: 8 },
   reportCopyBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  reportCopyBtnText: { fontSize: 11, fontWeight: '700' },
-  reportDeleteBtn: { backgroundColor: 'rgba(255, 59, 48, 0.15)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center' },
-  reportDeleteBtnText: { fontSize: 11, fontWeight: '700', color: '#ff3b30' },
+  reportCopyBtnText: { fontSize: 12, fontWeight: '700' },
+  reportDeleteBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,59,48,0.4)', justifyContent: 'center', alignItems: 'center' },
+  reportDeleteBtnText: { fontSize: 12, fontWeight: '700', color: '#ff3b30' },
 });

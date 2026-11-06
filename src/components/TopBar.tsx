@@ -1,7 +1,7 @@
+// src/components/TopBar.tsx
 import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import { useAppTheme } from '../theme/ThemeContext';
-import { SidebarButton } from './SidebarButton'; // Використовуємо наш вивірений ідеальний компонент піраміди!
 
 interface TopBarProps {
   title: string;
@@ -13,9 +13,6 @@ export const TopBar = ({ title, subtitle }: TopBarProps) => {
 
   return (
     <View style={styles.container}>
-      {/* Наша футуристична анімована кнопка-піраміда */}
-      <SidebarButton />
-
       <View style={styles.textContainer}>
         <Text style={[styles.title, { color: theme.textPrimary }]}>{title}</Text>
         {subtitle ? (
