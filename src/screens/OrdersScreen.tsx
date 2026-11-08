@@ -208,7 +208,7 @@ export default function OrdersScreen() {
       </View>
 
       <FlatList
-        data={orders}
+        data={orders}    
         keyExtractor={(item, index) => item?.id ? String(item.id) : `order-${index}`}
         renderItem={renderOrderItem}
         contentContainerStyle={styles.listContainer}

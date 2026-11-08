@@ -1,7 +1,14 @@
 import { createMMKV } from 'react-native-mmkv';
 import { Order } from '../types/order';
 import { AIReport } from '../types/aiReport';
-import { ShopIntegration } from '../types/shop';
+import { ShopIntegration as BaseShopIntegration } from '../types/shop';
+
+// Розширюємо локальний інтерфейс, щоб TypeScript знав про WooCommerce поля
+interface ShopIntegration extends BaseShopIntegration {
+  consumer_key?: string;
+  consumer_secret?: string;
+  platform?: 'shopify' | 'woocommerce' | string;
+}
 
 const API_BASE_URL = 'https://ecombot-2.onrender.com';
 const REQUEST_TIMEOUT_MS = 30000;
@@ -267,10 +274,23 @@ export class ApiService {
   }
 
   static async getOrders(shop: ShopIntegration): Promise<Order[]> {
+    const bodyData: Record<string, unknown> = {
+      shop: shop.name,
+      platform: shop.platform || 'shopify',
+    };
+
+    if (shop.platform === 'woocommerce') {
+      bodyData.consumer_key = shop.consumer_key;
+      bodyData.consumer_secret = shop.consumer_secret;
+    } else {
+      bodyData.token = shop.token;
+    }
+
     const data = await request<OrdersResponse>('/api/orders', {
       method: 'POST',
-      body: { shop: shop.name, token: shop.token },
+      body: bodyData,
     });
+
     return (data.orders ?? []).map((order) => ({
       ...mapOrder(order),
       shopId: shop.id,
@@ -303,14 +323,23 @@ export class ApiService {
   }
 
   static async processWithAI(order: Order, chatHistory: string, shop: ShopIntegration): Promise<AIReport> {
+    const aiBody: Record<string, unknown> = {
+      shop: shop.name,
+      platform: shop.platform || 'shopify',
+      order_data: toBackendOrder(order),
+      chat_messages: chatHistory,
+    };
+
+    if (shop.platform === 'woocommerce') {
+      aiBody.consumer_key = shop.consumer_key;
+      aiBody.consumer_secret = shop.consumer_secret;
+    } else {
+      aiBody.token = shop.token;
+    }
+
     const data = await request<AIResponse>('/api/process-ai', {
       method: 'POST',
-      body: {
-        shop: shop.name,
-        token: shop.token,
-        order_data: toBackendOrder(order),
-        chat_messages: chatHistory,
-      },
+      body: aiBody,
     });
 
     if (!data.ai_report) {
