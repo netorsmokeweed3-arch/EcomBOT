@@ -274,12 +274,15 @@ export class ApiService {
   }
 
   static async getOrders(shop: ShopIntegration): Promise<Order[]> {
+    const inferredPlatform = shop.name.includes('localsite') || shop.name.includes('wp') ? 'woocommerce' : 'shopify';
+    const platform = (shop.platform || inferredPlatform).toLowerCase();
+
     const bodyData: Record<string, unknown> = {
       shop: shop.name,
-      platform: shop.platform || 'shopify',
+      platform: platform,
     };
 
-    if (shop.platform === 'woocommerce') {
+    if (platform === 'woocommerce') {
       bodyData.consumer_key = shop.consumer_key;
       bodyData.consumer_secret = shop.consumer_secret;
     } else {
@@ -323,14 +326,17 @@ export class ApiService {
   }
 
   static async processWithAI(order: Order, chatHistory: string, shop: ShopIntegration): Promise<AIReport> {
+    const inferredPlatform = shop.name.includes('localsite') || shop.name.includes('wp') ? 'woocommerce' : 'shopify';
+    const platform = (shop.platform || inferredPlatform).toLowerCase();
+
     const aiBody: Record<string, unknown> = {
       shop: shop.name,
-      platform: shop.platform || 'shopify',
+      platform: platform,
       order_data: toBackendOrder(order),
       chat_messages: chatHistory,
     };
 
-    if (shop.platform === 'woocommerce') {
+    if (platform === 'woocommerce') {
       aiBody.consumer_key = shop.consumer_key;
       aiBody.consumer_secret = shop.consumer_secret;
     } else {
@@ -386,7 +392,6 @@ export class ApiService {
     };
   }
 
-  // --- МЕТОД ДЛЯ АВТОМАТИЧНОГО ПОШТОВОГО ТРЕКІНГУ ---
   static async trackParcel(trackingNumber: string, carrier: string = 'Нова Пошта'): Promise<{
     success: boolean;
     carrier?: string;
@@ -404,7 +409,6 @@ export class ApiService {
     });
   }
 
-  // --- МЕТОД РЕЄСТРАЦІЇ PUSH-ТОКЕНА НА СЕРВЕРІ ---
   static async registerPushToken(pushToken: string): Promise<void> {
     try {
       await request('/api/notifications/register', {
