@@ -15,6 +15,7 @@ import {
 import { createMMKV } from 'react-native-mmkv';
 import { useAppTheme } from '../theme/ThemeContext';
 import { AuraHeader } from '../components/AuraHeader';
+import { ShopIntegration } from '../types/shop';
 
 const storage = createMMKV();
 export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
@@ -23,12 +24,6 @@ const STORAGE_KEYS = {
   SAVED_SHOPS: 'saved_shops',
   SERVER_URL: 'server_url',
 } as const;
-
-interface ShopIntegration {
-  id: string;
-  name: string;
-  token: string;
-}
 
 interface ShopCardProps {
   shop: ShopIntegration;
@@ -40,31 +35,26 @@ interface ShopCardProps {
 const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardProps) => {
   const { theme } = useAppTheme();
 
-  const maskedToken = useMemo(() => {
-    return '•'.repeat(Math.min(shop.token.length, 20));
-  }, [shop.token]);
-
-  const handlePressToggle = useCallback(() => {
-    onToggleToken(shop.id);
-  }, [onToggleToken, shop.id]);
-
-  const handlePressDelete = useCallback(() => {
-    onDelete(shop.id);
-  }, [onDelete, shop.id]);
+  const credentialDisplay = useMemo(() => {
+    const secret = shop.consumer_secret || shop.token || '';
+    return isVisible ? secret : '•'.repeat(Math.min(secret.length, 20));
+  }, [shop.consumer_secret, shop.token, isVisible]);
 
   return (
     <View style={[styles.shopCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
       <View style={styles.shopInfo}>
-        <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>{shop.name}</Text>
+        <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>
+          {shop.name} {shop.platform ? `(${shop.platform})` : ''}
+        </Text>
         <Text style={[styles.shopToken, { color: theme.textSecondary }]} numberOfLines={1}>
-          Токен: {isVisible ? shop.token : maskedToken}
+          Ключ/Токен: {credentialDisplay}
         </Text>
       </View>
 
       <View style={styles.cardActions}>
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
-          onPress={handlePressToggle}
+          onPress={() => onToggleToken(shop.id)}
           activeOpacity={0.7}
         >
           <Text style={[styles.actionButtonText, { color: theme.primary }]}>
@@ -74,7 +64,7 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
 
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.3)' }]}
-          onPress={handlePressDelete}
+          onPress={() => onDelete(shop.id)}
           activeOpacity={0.7}
         >
           <Text style={styles.deleteButtonText}>Видалити</Text>
@@ -91,6 +81,7 @@ export default function IntegrationsScreen() {
 
   const [shopName, setShopName] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [consumerSecret, setConsumerSecret] = useState('');
   const [shops, setShops] = useState<ShopIntegration[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -115,12 +106,20 @@ export default function IntegrationsScreen() {
     loadShops();
   }, [loadShops]);
 
+  const isWooCommerce = shopName.includes('localsite') || shopName.includes('wp') || consumerSecret.trim().length > 0;
+
   const handleSave = useCallback(() => {
     const trimmedName = shopName.trim();
-    const trimmedToken = apiKey.trim();
+    const trimmedKey = apiKey.trim();
+    const trimmedSecret = consumerSecret.trim();
 
-    if (!trimmedName || !trimmedToken) {
-      Alert.alert('Помилка ❌', 'Будь ласка, введіть назву магазину та API-токен.');
+    if (!trimmedName || !trimmedKey) {
+      Alert.alert('Помилка ❌', 'Будь ласка, введіть назву магазину та основний ключ/токен.');
+      return;
+    }
+
+    if (isWooCommerce && !trimmedSecret) {
+      Alert.alert('Помилка ❌', 'Для WooCommerce обов’язково потрібен Consumer Secret.');
       return;
     }
 
@@ -128,10 +127,15 @@ export default function IntegrationsScreen() {
     setIsSaving(true);
 
     try {
+      const platform = isWooCommerce ? 'woocommerce' : 'shopify';
+      
       const newShop: ShopIntegration = {
         id: Date.now().toString(),
         name: trimmedName,
-        token: trimmedToken,
+        platform: platform,
+        token: platform === 'shopify' ? trimmedKey : '',
+        consumer_key: platform === 'woocommerce' ? trimmedKey : undefined,
+        consumer_secret: platform === 'woocommerce' ? trimmedSecret : undefined,
       };
 
       setShops((prevShops) => {
@@ -144,14 +148,15 @@ export default function IntegrationsScreen() {
 
       setShopName('');
       setApiKey('');
+      setConsumerSecret('');
       setIsApiKeyVisible(false);
-      Alert.alert('Успіх ✅', 'Магазин успішно інтегровано!');
+      Alert.alert('Успіх ✅', `Магазин (${platform}) успішно інтегровано!`);
     } catch (error) {
       Alert.alert('Помилка ❌', 'Не вдалося зберегти інтеграцію.');
     } finally {
       setIsSaving(false);
     }
-  }, [shopName, apiKey, isSaving]);
+  }, [shopName, apiKey, consumerSecret, isWooCommerce, isSaving]);
 
   const handleDelete = useCallback((id: string) => {
     Alert.alert(
@@ -176,10 +181,6 @@ export default function IntegrationsScreen() {
 
   const toggleShowToken = useCallback((id: string) => {
     setShowTokens((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, []);
-
-  const toggleApiKeyVisibility = useCallback(() => {
-    setIsApiKeyVisible((prev) => !prev);
   }, []);
 
   const renderedShopsList = useMemo(() => {
@@ -217,12 +218,14 @@ export default function IntegrationsScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={[styles.formCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
           <Text style={[styles.title, { color: theme.textPrimary }]}>Підключення магазину</Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Введіть назву та API-токен вашої платформи для безперебійного зв'язку з агентами.</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Для Shopify введіть домен і Token. Для WooCommerce (localsite) введіть домен, Consumer Key та Consumer Secret.
+          </Text>
 
-          <Text style={[styles.label, { color: theme.textPrimary }]}>Назва магазину</Text>
+          <Text style={[styles.label, { color: theme.textPrimary }]}>Назва магазину / Домен</Text>
           <TextInput
             style={[styles.input, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textPrimary }]}
-            placeholder="Наприклад: my-store або my-store.myshopify.com"
+            placeholder="Наприклад: tiny-emoji.localsite.io"
             placeholderTextColor={theme.textSecondary}
             value={shopName}
             onChangeText={setShopName}
@@ -230,11 +233,13 @@ export default function IntegrationsScreen() {
             autoCorrect={false}
           />
 
-          <Text style={[styles.label, { color: theme.textPrimary }]}>API-токен (Ключ доступу)</Text>
+          <Text style={[styles.label, { color: theme.textPrimary }]}>
+            {isWooCommerce ? 'Consumer Key (CK)' : 'API-токен (Shopify Token)'}
+          </Text>
           <View style={[styles.passwordContainer, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
             <TextInput
               style={[styles.passwordInput, { color: theme.textPrimary }]}
-              placeholder="Введіть ваш токен..."
+              placeholder={isWooCommerce ? 'ck_... або токен' : 'shpat_...'}
               placeholderTextColor={theme.textSecondary}
               secureTextEntry={!isApiKeyVisible}
               value={apiKey}
@@ -244,7 +249,7 @@ export default function IntegrationsScreen() {
             />
             <TouchableOpacity 
               style={styles.eyeButton} 
-              onPress={toggleApiKeyVisibility}
+              onPress={() => setIsApiKeyVisible(!isApiKeyVisible)}
               activeOpacity={0.7}
             >
               <Text style={[styles.eyeButtonText, { color: theme.primary }]}>
@@ -252,6 +257,22 @@ export default function IntegrationsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {isWooCommerce && (
+            <>
+              <Text style={[styles.label, { color: theme.textPrimary }]}>Consumer Secret (CS)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textPrimary }]}
+                placeholder="cs_..."
+                placeholderTextColor={theme.textSecondary}
+                value={consumerSecret}
+                onChangeText={setConsumerSecret}
+                secureTextEntry={true}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </>
+          )}
 
           <TouchableOpacity 
             style={[styles.saveButton, { backgroundColor: theme.primary }, isSaving && styles.saveButtonDisabled]} 
