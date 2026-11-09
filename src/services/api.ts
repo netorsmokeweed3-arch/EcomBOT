@@ -1,11 +1,23 @@
 import { createMMKV } from 'react-native-mmkv';
 import { Order } from '../types/order';
 import { AIReport } from '../types/aiReport';
-import { ShopIntegration } from '../types/shop';
+import { ShopIntegration as BaseShopIntegration } from '../types/shop';
+
+// Розширюємо локальний інтерфейс, щоб TypeScript знав про WooCommerce поля
+interface ShopIntegration extends BaseShopIntegration {
+  consumer_key?: string;
+  consumer_secret?: string;
+  platform?: 'shopify' | 'woocommerce' | string;
+}
 
 const API_BASE_URL = 'https://ecombot-2.onrender.com';
 const REQUEST_TIMEOUT_MS = 30000;
 const SHOPS_STORAGE_KEY = 'saved_shops';
+const MAX_RETRIES = 3; // Кількість автоматичних повторних спроб при зникненні інтернету
+const RETRY_DELAY_MS = 1500; // Пауза між спробами
+
+// Секретний ключ авторизації для зв'язку із захищеним бекендом
+const API_MASTER_KEY = 'netor-secure-saas-secret-key-2026';
 
 const storage = createMMKV();
 
@@ -203,14 +215,19 @@ function toBackendOrder(order: Order): DataRecord {
   };
 }
 
-async function request<T extends { success: boolean; error?: string }>(
+// --- БЕЗПЕЧНИЙ ЗАПИТ З АВТОМАТИЧНИМ BEARER TOKEN ТА RETRY ---
+async function singleRequest<T extends { success: boolean; error?: string }>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { 
+    Accept: 'application/json',
+    Authorization: `Bearer ${API_MASTER_KEY}`,
+  };
+  
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -248,6 +265,32 @@ async function request<T extends { success: boolean; error?: string }>(
   }
 }
 
+// Обгортка з автоматичним повторенням запиту при зникненні інтернету
+async function request<T extends { success: boolean; error?: string }>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await singleRequest<T>(path, options);
+    } catch (error) {
+      lastError = error;
+      if (error instanceof ApiError && (error.kind === 'network' || error.kind === 'timeout')) {
+        if (attempt < MAX_RETRIES) {
+          console.warn(`Мережевий збій (спроба ${attempt}/${MAX_RETRIES}). Повторюємо через ${RETRY_DELAY_MS}мс...`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+          continue;
+        }
+      }
+      break;
+    }
+  }
+
+  throw lastError;
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return error.message;
@@ -267,10 +310,23 @@ export class ApiService {
   }
 
   static async getOrders(shop: ShopIntegration): Promise<Order[]> {
+    const bodyData: Record<string, unknown> = {
+      shop: shop.name,
+      platform: shop.platform || 'shopify',
+    };
+
+    if (shop.platform === 'woocommerce') {
+      bodyData.consumer_key = shop.consumer_key;
+      bodyData.consumer_secret = shop.consumer_secret;
+    } else {
+      bodyData.token = shop.token;
+    }
+
     const data = await request<OrdersResponse>('/api/orders', {
       method: 'POST',
-      body: { shop: shop.name, token: shop.token },
+      body: bodyData,
     });
+
     return (data.orders ?? []).map((order) => ({
       ...mapOrder(order),
       shopId: shop.id,
@@ -303,14 +359,23 @@ export class ApiService {
   }
 
   static async processWithAI(order: Order, chatHistory: string, shop: ShopIntegration): Promise<AIReport> {
+    const aiBody: Record<string, unknown> = {
+      shop: shop.name,
+      platform: shop.platform || 'shopify',
+      order_data: toBackendOrder(order),
+      chat_messages: chatHistory,
+    };
+
+    if (shop.platform === 'woocommerce') {
+      aiBody.consumer_key = shop.consumer_key;
+      aiBody.consumer_secret = shop.consumer_secret;
+    } else {
+      aiBody.token = shop.token;
+    }
+
     const data = await request<AIResponse>('/api/process-ai', {
       method: 'POST',
-      body: {
-        shop: shop.name,
-        token: shop.token,
-        order_data: toBackendOrder(order),
-        chat_messages: chatHistory,
-      },
+      body: aiBody,
     });
 
     if (!data.ai_report) {
@@ -355,5 +420,35 @@ export class ApiService {
         : orderItems,
       aiSummary: report.aiSummary || text(asRecord(data.ai_report)?.ai_summary) || '',
     };
+  }
+
+  // --- МЕТОД ДЛЯ АВТОМАТИЧНОГО ПОШТОВОГО ТРЕКІНГУ ---
+  static async trackParcel(trackingNumber: string, carrier: string = 'Нова Пошта'): Promise<{
+    success: boolean;
+    carrier?: string;
+    trackingNumber?: string;
+    status?: string;
+    warehouse?: string;
+    weight?: string;
+    backDeliverySum?: string;
+    timelineEvents?: string[];
+    error?: string;
+  }> {
+    return await request('/api/tracking', {
+      method: 'POST',
+      body: { trackingNumber, carrier },
+    });
+  }
+
+  // --- МЕТОД РЕЄСТРАЦІЇ PUSH-ТОКЕНА НА СЕРВЕРІ ---
+  static async registerPushToken(pushToken: string): Promise<void> {
+    try {
+      await request('/api/notifications/register', {
+        method: 'POST',
+        body: { push_token: pushToken },
+      });
+    } catch (error) {
+      console.warn('Не вдалося зареєструвати push-токен на сервері:', error);
+    }
   }
 }

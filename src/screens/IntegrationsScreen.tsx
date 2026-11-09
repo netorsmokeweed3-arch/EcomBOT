@@ -1,3 +1,4 @@
+// src/screens/IntegrationsScreen.tsx
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { 
   StyleSheet, 
@@ -6,12 +7,17 @@ import {
   TextInput, 
   TouchableOpacity, 
   Alert, 
-  SafeAreaView, 
   StatusBar, 
   ScrollView, 
-  ActivityIndicator 
+  ActivityIndicator,
+  Platform,
+  FlatList,
+  KeyboardAvoidingView 
 } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
+import { useAppTheme } from '../theme/ThemeContext';
+import { AuraHeader } from '../components/AuraHeader';
+import { MARKETPLACES, MarketplaceConfig, MarketplaceField } from '../constants/marketplaces';
 
 const storage = createMMKV();
 export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
@@ -23,10 +29,12 @@ const STORAGE_KEYS = {
 
 interface ShopIntegration {
   id: string;
-  name: string;
-  token: string;
+  platformId: string;
+  platformName: string;
+  credentials: Record<string, string>;
 }
 
+// 1. Оптимізована картка підключеного магазину
 interface ShopCardProps {
   shop: ShopIntegration;
   isVisible: boolean;
@@ -34,43 +42,43 @@ interface ShopCardProps {
   onDelete: (id: string) => void;
 }
 
-// Повністю оптимізована мемоізована картка магазину
 const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardProps) => {
-  const maskedToken = useMemo(() => {
-    return '•'.repeat(Math.min(shop.token.length, 20));
-  }, [shop.token]);
+  const { theme } = useAppTheme();
 
-  const handlePressToggle = useCallback(() => {
-    onToggleToken(shop.id);
-  }, [onToggleToken, shop.id]);
-
-  const handlePressDelete = useCallback(() => {
-    onDelete(shop.id);
-  }, [onDelete, shop.id]);
+  const credentialsSummary = useMemo(() => {
+    return Object.entries(shop.credentials)
+      .map(([key, val]) => {
+        const masked = '•'.repeat(Math.min(val.length, 16));
+        return `${key}: ${isVisible ? val : masked}`;
+      })
+      .join(' | ');
+  }, [shop.credentials, isVisible]);
 
   return (
-    <View style={styles.shopCard}>
+    <View style={[styles.shopCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
       <View style={styles.shopInfo}>
-        <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
-        <Text style={styles.shopToken} numberOfLines={1}>
-          Токен: {isVisible ? shop.token : maskedToken}
+        <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>
+          {shop.platformName}
+        </Text>
+        <Text style={[styles.shopToken, { color: theme.textSecondary }]} numberOfLines={2}>
+          {credentialsSummary}
         </Text>
       </View>
 
       <View style={styles.cardActions}>
         <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handlePressToggle}
+          style={[styles.actionButton, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
+          onPress={() => onToggleToken(shop.id)}
           activeOpacity={0.7}
         >
-          <Text style={styles.actionButtonText}>
+          <Text style={[styles.actionButtonText, { color: theme.primary }]}>
             {isVisible ? 'Сховати' : 'Показати'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={handlePressDelete}
+          style={[styles.actionButton, styles.deleteButton, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.3)' }]}
+          onPress={() => onDelete(shop.id)}
           activeOpacity={0.7}
         >
           <Text style={styles.deleteButtonText}>Видалити</Text>
@@ -82,13 +90,64 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
 
 ShopCard.displayName = 'ShopCard';
 
+// 2. Ізольований компонент для вибору платформи
+interface MarketplaceSelectorProps {
+  selectedId: string;
+  onSelect: (item: MarketplaceConfig) => void;
+  theme: any;
+}
+
+const MarketplaceSelector = memo(({ selectedId, onSelect, theme }: MarketplaceSelectorProps) => {
+  const renderItem = useCallback(({ item }: { item: MarketplaceConfig }) => {
+    const isSelected = selectedId === item.id;
+    return (
+      <TouchableOpacity
+        style={[
+          styles.chip,
+          { 
+            backgroundColor: isSelected ? theme.primary : theme.cardBg, 
+            borderColor: isSelected ? theme.primary : theme.cardBorder 
+          }
+        ]}
+        onPress={() => onSelect(item)}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.chipText, { color: isSelected ? theme.bgDark : theme.textPrimary }]}>
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, [selectedId, onSelect, theme]);
+
+  return (
+    <View style={styles.selectorContainer}>
+      <Text style={[styles.label, { color: theme.textPrimary }]}>Оберіть платформу або маркетплейс</Text>
+      <FlatList
+        data={MARKETPLACES}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsScroll}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+      />
+    </View>
+  );
+});
+
+MarketplaceSelector.displayName = 'MarketplaceSelector';
+
 export default function IntegrationsScreen() {
-  const [shopName, setShopName] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const { theme } = useAppTheme();
+
+  const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceConfig>(MARKETPLACES[0]);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [shops, setShops] = useState<ShopIntegration[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   
-  const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
+  const [showSecureFields, setShowSecureFields] = useState<Record<string, boolean>>({});
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
 
   const loadShops = useCallback(() => {
@@ -96,9 +155,7 @@ export default function IntegrationsScreen() {
       const savedShopsJson = storage.getString(STORAGE_KEYS.SAVED_SHOPS);
       if (savedShopsJson) {
         const parsed = JSON.parse(savedShopsJson);
-        if (Array.isArray(parsed)) {
-          setShops(parsed);
-        }
+        if (Array.isArray(parsed)) setShops(parsed);
       }
     } catch (error) {
       console.log('Помилка завантаження магазинів', error);
@@ -109,13 +166,27 @@ export default function IntegrationsScreen() {
     loadShops();
   }, [loadShops]);
 
-  const handleSave = useCallback(() => {
-    const trimmedName = shopName.trim();
-    const trimmedToken = apiKey.trim();
+  const handleSelectMarketplace = useCallback((item: MarketplaceConfig) => {
+    setSelectedMarketplace(item);
+    setFormValues({});
+    setShowSecureFields({});
+  }, []);
 
-    if (!trimmedName || !trimmedToken) {
-      Alert.alert('Помилка ❌', 'Будь ласка, введіть назву магазину та API-токен.');
-      return;
+  const handleFieldChange = useCallback((key: string, value: string) => {
+    setFormValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const toggleSecureFieldVisibility = useCallback((key: string) => {
+    setShowSecureFields((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const handleSave = useCallback(() => {
+    for (const field of selectedMarketplace.fields) {
+      const val = formValues[field.key]?.trim();
+      if (!val) {
+        Alert.alert('Помилка ❌', `Будь ласка, заповніть поле: "${field.label}"`);
+        return;
+      }
     }
 
     if (isSaving) return;
@@ -124,8 +195,9 @@ export default function IntegrationsScreen() {
     try {
       const newShop: ShopIntegration = {
         id: Date.now().toString(),
-        name: trimmedName,
-        token: trimmedToken,
+        platformId: selectedMarketplace.id,
+        platformName: selectedMarketplace.name,
+        credentials: { ...formValues },
       };
 
       setShops((prevShops) => {
@@ -136,16 +208,15 @@ export default function IntegrationsScreen() {
 
       storage.set(STORAGE_KEYS.SERVER_URL, RENDER_SERVER_URL);
 
-      setShopName('');
-      setApiKey('');
-      setIsApiKeyVisible(false);
-      Alert.alert('Успіх ✅', 'Магазин успішно інтегровано!');
+      setFormValues({});
+      setShowSecureFields({});
+      Alert.alert('Успіх ✅', `Магазин "${selectedMarketplace.name}" успішно інтегровано!`);
     } catch (error) {
       Alert.alert('Помилка ❌', 'Не вдалося зберегти інтеграцію.');
     } finally {
       setIsSaving(false);
     }
-  }, [shopName, apiKey, isSaving]);
+  }, [selectedMarketplace, formValues, isSaving]);
 
   const handleDelete = useCallback((id: string) => {
     Alert.alert(
@@ -172,16 +243,65 @@ export default function IntegrationsScreen() {
     setShowTokens((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  const toggleApiKeyVisibility = useCallback(() => {
-    setIsApiKeyVisible((prev) => !prev);
-  }, []);
+  // Генерація динамічних полів вводу
+  const renderedDynamicFields = useMemo(() => {
+    return selectedMarketplace.fields.map((field: MarketplaceField) => {
+      const isSecured = field.secure;
+      const isVisible = !!showSecureFields[field.key];
+      const value = formValues[field.key] || '';
+
+      if (isSecured) {
+        return (
+          <View key={field.key}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>{field.label}</Text>
+            <View style={[styles.passwordContainer, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
+              <TextInput
+                style={[styles.passwordInput, { color: theme.textPrimary }]}
+                placeholder={field.placeholder}
+                placeholderTextColor={theme.textSecondary}
+                secureTextEntry={!isVisible}
+                value={value}
+                onChangeText={(text) => handleFieldChange(field.key, text)}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity 
+                style={styles.eyeButton} 
+                onPress={() => toggleSecureFieldVisibility(field.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.eyeButtonText, { color: theme.primary }]}>
+                  {isVisible ? 'Сховати' : 'Показати'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      }
+
+      return (
+        <View key={field.key}>
+          <Text style={[styles.label, { color: theme.textPrimary }]}>{field.label}</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textPrimary }]}
+            placeholder={field.placeholder}
+            placeholderTextColor={theme.textSecondary}
+            value={value}
+            onChangeText={(text) => handleFieldChange(field.key, text)}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+      );
+    });
+  }, [selectedMarketplace, formValues, showSecureFields, theme, handleFieldChange, toggleSecureFieldVisibility]);
 
   const renderedShopsList = useMemo(() => {
     if (shops.length === 0) return null;
 
     return (
       <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>Підключені магазини ({shops.length})</Text>
+        <Text style={[styles.listTitle, { color: theme.textPrimary }]}>Підключені магазини ({shops.length})</Text>
         {shops.map((shop) => (
           <ShopCard
             key={shop.id}
@@ -193,93 +313,99 @@ export default function IntegrationsScreen() {
         ))}
       </View>
     );
-  }, [shops, showTokens, toggleShowToken, handleDelete]);
+  }, [shops, showTokens, toggleShowToken, handleDelete, theme]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f7" />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Підключення магазинів</Text>
-        <Text style={styles.subtitle}>Додайте назву та API-токен вашого маркетплейса для синхронізації через ШІ.</Text>
+    <View style={[styles.container, { backgroundColor: theme.bgDark }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+      
+      <AuraHeader />
 
-        <Text style={styles.label}>Назва магазину</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Наприклад: my-store або my-store.myshopify.com"
-          placeholderTextColor="#8e8e93"
-          value={shopName}
-          onChangeText={setShopName}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <Text style={styles.label}>API-токен (Ключ доступу)</Text>
-        <View style={styles.passwordContainer}>
-          <TextInput
-            style={styles.passwordInput}
-            placeholder="Введіть ваш токен..."
-            placeholderTextColor="#8e8e93"
-            secureTextEntry={!isApiKeyVisible}
-            value={apiKey}
-            onChangeText={setApiKey}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TouchableOpacity 
-            style={styles.eyeButton} 
-            onPress={toggleApiKeyVisibility}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.eyeButtonText}>
-              {isApiKeyVisible ? 'Сховати' : 'Показати'}
-            </Text>
-          </TouchableOpacity>
+      <View style={styles.topBar}>
+        <View>
+          <Text style={[styles.topBarTitle, { color: theme.textPrimary }]}>🔗 Інтеграції та Магазини</Text>
+          <Text style={[styles.topBarSub, { color: theme.textSecondary }]}>Синхронізація маркетплейсів через ШІ</Text>
         </View>
+      </View>
 
-        <TouchableOpacity 
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
-          onPress={handleSave}
-          disabled={isSaving}
-          activeOpacity={0.8}
+      {/* Захист від перекриття клавіатурою для iOS / Android */}
+      <KeyboardAvoidingView 
+        style={styles.flexContainer} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.content} 
+          keyboardShouldPersistTaps="handled" 
+          showsVerticalScrollIndicator={false}
         >
-          {isSaving ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Text style={styles.saveButtonText}>Зберегти інтеграцію</Text>
-          )}
-        </TouchableOpacity>
+          <View style={[styles.formCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Підключення магазину</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Оберіть платформу із каталогу та введіть необхідні ключі доступу для надійного зв'язку з агентами.
+            </Text>
 
-        {renderedShopsList}
-      </ScrollView>
-    </SafeAreaView>
+            <MarketplaceSelector 
+              selectedId={selectedMarketplace.id} 
+              onSelect={handleSelectMarketplace} 
+              theme={theme} 
+            />
+
+            {renderedDynamicFields}
+
+            <TouchableOpacity 
+              style={[styles.saveButton, { backgroundColor: theme.primary }, isSaving && styles.saveButtonDisabled]} 
+              onPress={handleSave}
+              disabled={isSaving}
+              activeOpacity={0.8}
+            >
+              {isSaving ? (
+                <ActivityIndicator color={theme.bgDark} size="small" />
+              ) : (
+                <Text style={[styles.saveButtonText, { color: theme.bgDark }]}>Зберегти інтеграцію</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {renderedShopsList}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f7' },
-  content: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 6 },
-  subtitle: { fontSize: 14, color: '#8e8e93', marginBottom: 20, lineHeight: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#3a3a3c', marginBottom: 6 },
-  input: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#1c1c1e', marginBottom: 16 },
-  
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea', borderRadius: 12, marginBottom: 16 },
-  passwordInput: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#1c1c1e' },
+  container: { flex: 1 },
+  flexContainer: { flex: 1 },
+  topBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, zIndex: 10 },
+  topBarTitle: { fontSize: 17, fontWeight: '800', letterSpacing: 0.3 },
+  topBarSub: { fontSize: 11 },
+  content: { padding: 12, paddingBottom: 110, zIndex: 1 },
+  formCard: { borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 6 },
+  title: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  subtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 4 },
+  selectorContainer: { marginBottom: 12 },
+  chipsScroll: { paddingVertical: 4, gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 6, height: 36, justifyContent: 'center', alignItems: 'center' },
+  chipText: { fontSize: 13, fontWeight: '700' },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 10 },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, marginBottom: 10 },
+  passwordInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
   eyeButton: { paddingHorizontal: 14, paddingVertical: 10 },
-  eyeButtonText: { fontSize: 14, fontWeight: '600', color: '#007aff' },
-
-  saveButton: { backgroundColor: '#007aff', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 24, shadowColor: '#007aff', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  eyeButtonText: { fontSize: 13, fontWeight: '700' },
+  saveButton: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
   saveButtonDisabled: { opacity: 0.7 },
-  saveButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  listContainer: { marginTop: 10 },
-  listTitle: { fontSize: 18, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 12 },
-  shopCard: { backgroundColor: '#ffffff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e5e5ea', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  shopInfo: { marginBottom: 12 },
-  shopName: { fontSize: 16, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 4 },
-  shopToken: { fontSize: 14, color: '#8e8e93', fontFamily: 'monospace' },
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
-  actionButton: { backgroundColor: '#f2f2f7', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  actionButtonText: { fontSize: 13, fontWeight: '600', color: '#007aff' },
-  deleteButton: { backgroundColor: '#ffe5e5' },
-  deleteButtonText: { fontSize: 13, fontWeight: '600', color: '#ff3b30' },
+  saveButtonText: { fontSize: 15, fontWeight: '800' },
+  listContainer: { marginTop: 4 },
+  listTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 10, marginLeft: 4 },
+  shopCard: { borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  shopInfo: { marginBottom: 10 },
+  shopName: { fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
+  shopToken: { fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  actionButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  actionButtonText: { fontSize: 12, fontWeight: '700' },
+  deleteButton: { borderWidth: 1 },
+  deleteButtonText: { fontSize: 12, fontWeight: '700', color: '#ff3b30' },
 });

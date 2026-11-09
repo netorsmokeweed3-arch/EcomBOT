@@ -1,11 +1,17 @@
+// src/screens/AIScreen.tsx
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, View, StatusBar } from 'react-native';
 import { ApiService, getErrorMessage } from '../services/api';
 import { AIReport } from '../types/aiReport';
 import AIReportView from '../components/AIReportView';
 import { orderStore } from '../services/orderStore';
+import { useAppTheme } from '../theme/ThemeContext';
+import { AuraHeader } from '../components/AuraHeader';
+import { GlassCard } from '../components/GlassCard';
 
 export default function AIScreen() {
+  const { theme } = useAppTheme();
+
   const [report, setReport] = useState<AIReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -19,7 +25,7 @@ export default function AIScreen() {
 
   const handleAddOrderBack = useCallback((order: any) => {
     orderStore.addManualOrder(order);
-    Alert.alert('✅ Успіх', 'Замовлення успішно додано до розділу "Замовлення"!');
+    Alert.alert('Успіх', 'Замовлення успішно додано до розділу "Замовлення".');
   }, []);
 
   const handleRunAIAnalysis = useCallback(async (isRefresh = false) => {
@@ -36,14 +42,14 @@ export default function AIScreen() {
       const orders = await ApiService.getAllOrders();
       
       if (!orders || !Array.isArray(orders) || orders.length === 0) {
-        if (isMountedRef.current) Alert.alert('Увага ⚠️', 'Немає замовлень для аналізу.');
+        if (isMountedRef.current) Alert.alert('Увага', 'Немає замовлень для аналізу.');
         return;
       }
 
       const [firstOrder] = orders;
       const shopId = firstOrder.shopId || (firstOrder as any).shop_id;
       if (!firstOrder || !shopId) {
-        if (isMountedRef.current) Alert.alert('Помилка ❌', 'Некоректні дані замовлення або відсутній ID магазину.');
+        if (isMountedRef.current) Alert.alert('Помилка', 'Некоректні дані замовлення або відсутній ID магазину.');
         return;
       }
 
@@ -51,7 +57,7 @@ export default function AIScreen() {
       const shop = savedShops.find((saved) => saved.id === shopId);
       
       if (!shop) {
-        if (isMountedRef.current) Alert.alert('Помилка ❌', 'Не знайдено магазин для цього замовлення.');
+        if (isMountedRef.current) Alert.alert('Помилка', 'Не знайдено магазин для цього замовлення.');
         return;
       }
 
@@ -62,7 +68,7 @@ export default function AIScreen() {
 
       if (isMountedRef.current) setReport(aiReport);
     } catch (error) {
-      if (isMountedRef.current) Alert.alert('Помилка ❌', getErrorMessage(error));
+      if (isMountedRef.current) Alert.alert('Помилка', getErrorMessage(error));
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
@@ -73,43 +79,72 @@ export default function AIScreen() {
   }, [loading]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container} bounces={true} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => handleRunAIAnalysis(true)} tintColor="#007AFF" />}>
-      <Text style={styles.title}>🤖 ШІ-Помічник та Аналітика</Text>
-      <Text style={styles.subtitle}>Комплексний аналіз замовлень, чатів та актуальних курсів валют через Claude</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+      
+      <View style={styles.topBar}>
+        <View>
+          <Text style={[styles.topBarTitle, { color: theme.textPrimary }]}>ШІ-Помічник та Аналітика</Text>
+          <Text style={[styles.topBarSub, { color: theme.textSecondary }]}>Інтелектуальний аналіз через Claude</Text>
+        </View>
+      </View>
 
-      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={() => handleRunAIAnalysis(false)} disabled={loading} activeOpacity={0.8}>
-        {loading && !refreshing ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color="#fff" size="small" />
-            <Text style={styles.buttonTextLoading}>{loadingStepText}</Text>
-          </View>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        bounces={true} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => handleRunAIAnalysis(true)} tintColor={theme.primary} />}
+      >
+        <GlassCard style={styles.glassCardWrapper}>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>Комплексний корпоративний аналіз</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Глибока перевірка замовлень, комунікації в чатах та актуальних ринкових трендів.</Text>
+
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: theme.primary }, loading && styles.buttonDisabled]} 
+            onPress={() => handleRunAIAnalysis(false)} 
+            disabled={loading} 
+            activeOpacity={0.85}
+          >
+            {loading && !refreshing ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color="#070907" size="small" />
+                <Text style={styles.buttonTextLoading}>{loadingStepText}</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>{loadingStepText}</Text>
+            )}
+          </TouchableOpacity>
+        </GlassCard>
+
+        {report ? (
+          <AIReportView key={resetButtonKey} report={report} onAddOrder={handleAddOrderBack} showAddButton={true} />
         ) : (
-          <Text style={styles.buttonText}>{loadingStepText}</Text>
+          !loading && (
+            <GlassCard style={styles.glassCardWrapper}>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                Натисніть кнопку вище, щоб отримати повний звіт замовлень та актуальні фінансові дані.
+              </Text>
+            </GlassCard>
+          )
         )}
-      </TouchableOpacity>
-
-      {report ? (
-        <AIReportView key={resetButtonKey} report={report} onAddOrder={handleAddOrderBack} showAddButton={true} />
-      ) : (
-        !loading && (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Натисніть кнопку вище, щоб отримати повний звіт замовлень та актуальні фінансові дані 🚀</Text>
-          </View>
-        )
-      )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#f5f5f7', flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#111', marginBottom: 5 },
-  subtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
-  button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 20, shadowColor: '#007AFF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 3 },
-  buttonDisabled: { opacity: 0.8 },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  topBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, zIndex: 10 },
+  topBarTitle: { fontSize: 17, fontWeight: '800', letterSpacing: 0.3 },
+  topBarSub: { fontSize: 11 },
+  scrollContent: { padding: 12, paddingBottom: 90, zIndex: 1 },
+  glassCardWrapper: { marginBottom: 14 },
+  title: { fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
+  subtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
+  button: { padding: 14, borderRadius: 12, alignItems: 'center', shadowColor: 'transparent', shadowOpacity: 0, elevation: 0 },
+  buttonDisabled: { opacity: 0.7 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  buttonTextLoading: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
-  emptyContainer: { padding: 24, alignItems: 'center', justifyContent: 'center', marginTop: 20, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e5ea', borderStyle: 'dashed' },
-  emptyText: { textAlign: 'center', color: '#8e8e93', fontSize: 14, lineHeight: 20 },
+  buttonText: { fontSize: 14, fontWeight: '800', color: '#070907' },
+  buttonTextLoading: { fontSize: 13, fontWeight: '800', color: '#070907', marginLeft: 6 },
+  emptyText: { textAlign: 'center', fontSize: 13, lineHeight: 20, paddingVertical: 4 },
 });
