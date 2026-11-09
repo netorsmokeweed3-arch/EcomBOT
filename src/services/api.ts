@@ -13,6 +13,11 @@ interface ShopIntegration extends BaseShopIntegration {
 const API_BASE_URL = 'https://ecombot-2.onrender.com';
 const REQUEST_TIMEOUT_MS = 30000;
 const SHOPS_STORAGE_KEY = 'saved_shops';
+const MAX_RETRIES = 3; // Кількість автоматичних повторних спроб при зникненні інтернету
+const RETRY_DELAY_MS = 1500; // Пауза між спробами
+
+// Секретний ключ авторизації для зв'язку із захищеним бекендом
+const API_MASTER_KEY = 'netor-secure-saas-secret-key-2026';
 
 const storage = createMMKV();
 
@@ -210,14 +215,19 @@ function toBackendOrder(order: Order): DataRecord {
   };
 }
 
-async function request<T extends { success: boolean; error?: string }>(
+// --- БЕЗПЕЧНИЙ ЗАПИТ З АВТОМАТИЧНИМ BEARER TOKEN ТА RETRY ---
+async function singleRequest<T extends { success: boolean; error?: string }>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { 
+    Accept: 'application/json',
+    Authorization: `Bearer ${API_MASTER_KEY}`,
+  };
+  
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -253,6 +263,32 @@ async function request<T extends { success: boolean; error?: string }>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Обгортка з автоматичним повторенням запиту при зникненні інтернету
+async function request<T extends { success: boolean; error?: string }>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await singleRequest<T>(path, options);
+    } catch (error) {
+      lastError = error;
+      if (error instanceof ApiError && (error.kind === 'network' || error.kind === 'timeout')) {
+        if (attempt < MAX_RETRIES) {
+          console.warn(`Мережевий збій (спроба ${attempt}/${MAX_RETRIES}). Повторюємо через ${RETRY_DELAY_MS}мс...`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+          continue;
+        }
+      }
+      break;
+    }
+  }
+
+  throw lastError;
 }
 
 export function getErrorMessage(error: unknown): string {

@@ -283,3 +283,8 @@ const styles = StyleSheet.create({
   },
   tabLabel: { fontSize: 10, fontWeight: '600' },
 });
+
+
+
+
+
