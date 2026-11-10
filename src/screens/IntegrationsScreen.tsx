@@ -25,6 +25,7 @@ export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
 const STORAGE_KEYS = {
   SAVED_SHOPS: 'saved_shops',
   SERVER_URL: 'server_url',
+  EXPIRED_TOKENS: 'expired_tokens_map',
 } as const;
 
 interface ShopIntegration {
@@ -34,15 +35,16 @@ interface ShopIntegration {
   credentials: Record<string, string>;
 }
 
-// 1. Оптимізована картка підключеного магазину
 interface ShopCardProps {
   shop: ShopIntegration;
   isVisible: boolean;
+  isExpired: boolean;
   onToggleToken: (id: string) => void;
   onDelete: (id: string) => void;
+  onRefresh: (shop: ShopIntegration) => void;
 }
 
-const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardProps) => {
+const ShopCard = memo(({ shop, isVisible, isExpired, onToggleToken, onDelete, onRefresh }: ShopCardProps) => {
   const { theme } = useAppTheme();
 
   const credentialsSummary = useMemo(() => {
@@ -55,17 +57,34 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
   }, [shop.credentials, isVisible]);
 
   return (
-    <View style={[styles.shopCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
+    <View style={[styles.shopCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: isExpired ? '#ff3b30' : theme.cardBorder }]}>
       <View style={styles.shopInfo}>
-        <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>
-          {shop.platformName}
-        </Text>
+        <View style={styles.rowBetween}>
+          <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>
+            {shop.platformName}
+          </Text>
+          {isExpired && (
+            <View style={styles.expiredBadge}>
+              <Text style={styles.expiredBadgeText}>⚠️ Токен застарів</Text>
+            </View>
+          )}
+        </View>
         <Text style={[styles.shopToken, { color: theme.textSecondary }]} numberOfLines={2}>
           {credentialsSummary}
         </Text>
       </View>
 
       <View style={styles.cardActions}>
+        {isExpired && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.refreshButton]}
+            onPress={() => onRefresh(shop)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.refreshButtonText}>Оновити токен</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: theme.cardBorder }]}
           onPress={() => onToggleToken(shop.id)}
@@ -77,7 +96,7 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.3)' }]}
+          style={[styles.actionButton, styles.deleteButton]}
           onPress={() => onDelete(shop.id)}
           activeOpacity={0.7}
         >
@@ -90,7 +109,6 @@ const ShopCard = memo(({ shop, isVisible, onToggleToken, onDelete }: ShopCardPro
 
 ShopCard.displayName = 'ShopCard';
 
-// 2. Ізольований компонент для вибору платформи
 interface MarketplaceSelectorProps {
   selectedId: string;
   onSelect: (item: MarketplaceConfig) => void;
@@ -145,26 +163,33 @@ export default function IntegrationsScreen() {
   const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceConfig>(MARKETPLACES[0]);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [shops, setShops] = useState<ShopIntegration[]>([]);
+  const [expiredMap, setExpiredMap] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   
   const [showSecureFields, setShowSecureFields] = useState<Record<string, boolean>>({});
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
 
-  const loadShops = useCallback(() => {
+  const loadData = useCallback(() => {
     try {
       const savedShopsJson = storage.getString(STORAGE_KEYS.SAVED_SHOPS);
       if (savedShopsJson) {
         const parsed = JSON.parse(savedShopsJson);
         if (Array.isArray(parsed)) setShops(parsed);
       }
+
+      const expiredJson = storage.getString(STORAGE_KEYS.EXPIRED_TOKENS);
+      if (expiredJson) {
+        const parsedExpired = JSON.parse(expiredJson);
+        if (typeof parsedExpired === 'object') setExpiredMap(parsedExpired);
+      }
     } catch (error) {
-      console.log('Помилка завантаження магазинів', error);
+      console.log('Помилка завантаження даних інтеграцій', error);
     }
   }, []);
 
   useEffect(() => {
-    loadShops();
-  }, [loadShops]);
+    loadData();
+  }, [loadData]);
 
   const handleSelectMarketplace = useCallback((item: MarketplaceConfig) => {
     setSelectedMarketplace(item);
@@ -200,13 +225,15 @@ export default function IntegrationsScreen() {
         credentials: { ...formValues },
       };
 
-      setShops((prevShops) => {
-        const updatedShops = [...prevShops, newShop];
-        storage.set(STORAGE_KEYS.SAVED_SHOPS, JSON.stringify(updatedShops));
-        return updatedShops;
-      });
-
+      const updatedShops = [...shops, newShop];
+      setShops(updatedShops);
+      storage.set(STORAGE_KEYS.SAVED_SHOPS, JSON.stringify(updatedShops));
       storage.set(STORAGE_KEYS.SERVER_URL, RENDER_SERVER_URL);
+
+      // Знімаємо статус прострочення для щойно збереженого магазину
+      const newExpiredMap = { ...expiredMap, [newShop.id]: false };
+      setExpiredMap(newExpiredMap);
+      storage.set(STORAGE_KEYS.EXPIRED_TOKENS, JSON.stringify(newExpiredMap));
 
       setFormValues({});
       setShowSecureFields({});
@@ -216,7 +243,7 @@ export default function IntegrationsScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [selectedMarketplace, formValues, isSaving]);
+  }, [selectedMarketplace, formValues, isSaving, shops, expiredMap]);
 
   const handleDelete = useCallback((id: string) => {
     Alert.alert(
@@ -239,11 +266,20 @@ export default function IntegrationsScreen() {
     );
   }, []);
 
+  const handleRefreshShopToken = useCallback((shop: ShopIntegration) => {
+    const market = MARKETPLACES.find((m) => m.id === shop.platformId);
+    if (market) {
+      setSelectedMarketplace(market);
+      setFormValues(shop.credentials);
+      handleDelete(shop.id);
+      Alert.alert('Оновлення токена', 'Введіть нові актуальні дані та натисніть «Зберегти інтеграцію».');
+    }
+  }, [handleDelete]);
+
   const toggleShowToken = useCallback((id: string) => {
     setShowTokens((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  // Генерація динамічних полів вводу
   const renderedDynamicFields = useMemo(() => {
     return selectedMarketplace.fields.map((field: MarketplaceField) => {
       const isSecured = field.secure;
@@ -296,25 +332,6 @@ export default function IntegrationsScreen() {
     });
   }, [selectedMarketplace, formValues, showSecureFields, theme, handleFieldChange, toggleSecureFieldVisibility]);
 
-  const renderedShopsList = useMemo(() => {
-    if (shops.length === 0) return null;
-
-    return (
-      <View style={styles.listContainer}>
-        <Text style={[styles.listTitle, { color: theme.textPrimary }]}>Підключені магазини ({shops.length})</Text>
-        {shops.map((shop) => (
-          <ShopCard
-            key={shop.id}
-            shop={shop}
-            isVisible={!!showTokens[shop.id]}
-            onToggleToken={toggleShowToken}
-            onDelete={handleDelete}
-          />
-        ))}
-      </View>
-    );
-  }, [shops, showTokens, toggleShowToken, handleDelete, theme]);
-
   return (
     <View style={[styles.container, { backgroundColor: theme.bgDark }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
@@ -328,7 +345,6 @@ export default function IntegrationsScreen() {
         </View>
       </View>
 
-      {/* Захист від перекриття клавіатурою для iOS / Android */}
       <KeyboardAvoidingView 
         style={styles.flexContainer} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -367,7 +383,22 @@ export default function IntegrationsScreen() {
             </TouchableOpacity>
           </View>
 
-          {renderedShopsList}
+          {shops.length > 0 && (
+            <View style={styles.listContainer}>
+              <Text style={[styles.listTitle, { color: theme.textPrimary }]}>Підключені магазини ({shops.length})</Text>
+              {shops.map((shop) => (
+                <ShopCard
+                  key={shop.id}
+                  shop={shop}
+                  isVisible={!!showTokens[shop.id]}
+                  isExpired={!!expiredMap[shop.id]}
+                  onToggleToken={toggleShowToken}
+                  onDelete={handleDelete}
+                  onRefresh={handleRefreshShopToken}
+                />
+              ))}
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -401,11 +432,16 @@ const styles = StyleSheet.create({
   listTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 10, marginLeft: 4 },
   shopCard: { borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
   shopInfo: { marginBottom: 10 },
-  shopName: { fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  shopName: { fontSize: 15, fontWeight: 'bold' },
+  expiredBadge: { backgroundColor: 'rgba(255,59,48,0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  expiredBadgeText: { color: '#ff3b30', fontSize: 10, fontWeight: '700' },
   shopToken: { fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
   actionButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
   actionButtonText: { fontSize: 12, fontWeight: '700' },
-  deleteButton: { borderWidth: 1 },
+  refreshButton: { backgroundColor: '#ff3b30', borderColor: '#ff3b30' },
+  refreshButtonText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  deleteButton: { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.3)' },
   deleteButtonText: { fontSize: 12, fontWeight: '700', color: '#ff3b30' },
 });

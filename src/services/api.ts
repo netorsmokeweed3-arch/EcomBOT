@@ -1,9 +1,9 @@
+// src/services/api.ts
 import { createMMKV } from 'react-native-mmkv';
 import { Order } from '../types/order';
 import { AIReport } from '../types/aiReport';
 import { ShopIntegration as BaseShopIntegration } from '../types/shop';
 
-// Розширюємо локальний інтерфейс, щоб TypeScript знав про WooCommerce поля
 interface ShopIntegration extends BaseShopIntegration {
   consumer_key?: string;
   consumer_secret?: string;
@@ -13,15 +13,15 @@ interface ShopIntegration extends BaseShopIntegration {
 const API_BASE_URL = 'https://ecombot-2.onrender.com';
 const REQUEST_TIMEOUT_MS = 30000;
 const SHOPS_STORAGE_KEY = 'saved_shops';
-const MAX_RETRIES = 3; // Кількість автоматичних повторних спроб при зникненні інтернету
-const RETRY_DELAY_MS = 1500; // Пауза між спробами
+const EXPIRED_TOKENS_KEY = 'expired_tokens_map';
+const AUTH_TOKEN_KEY = 'auth_jwt_token';
 
-// Секретний ключ авторизації для зв'язку із захищеним бекендом
-const API_MASTER_KEY = 'netor-secure-saas-secret-key-2026';
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1500;
 
 const storage = createMMKV();
 
-export type ApiErrorKind = 'network' | 'timeout' | 'server' | 'parse' | 'config';
+export type ApiErrorKind = 'network' | 'timeout' | 'server' | 'parse' | 'config' | 'auth';
 
 export class ApiError extends Error {
   kind: ApiErrorKind;
@@ -36,13 +36,17 @@ export class ApiError extends Error {
 interface OrdersResponse {
   success: boolean;
   orders?: unknown[];
+  token_expired?: boolean;
   error?: string;
+  detail?: string;
 }
 
 interface AIResponse {
   success: boolean;
   ai_report?: unknown;
+  token_expired?: boolean;
   error?: string;
+  detail?: string;
 }
 
 interface RequestOptions {
@@ -94,6 +98,17 @@ function amount(value: unknown): number {
 function formattedMoney(value: unknown): string {
   const record = asRecord(value);
   return firstText(record?.formatted, record?.amount, value);
+}
+
+function markShopTokenExpired(shopId: string) {
+  try {
+    const raw = storage.getString(EXPIRED_TOKENS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[shopId] = true;
+    storage.set(EXPIRED_TOKENS_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Не вдалося оновити статус прострочення токена магазину:', e);
+  }
 }
 
 function mapOrder(value: unknown): Order {
@@ -215,17 +230,20 @@ function toBackendOrder(order: Order): DataRecord {
   };
 }
 
-// --- БЕЗПЕЧНИЙ ЗАПИТ З АВТОМАТИЧНИМ BEARER TOKEN ТА RETRY ---
-async function singleRequest<T extends { success: boolean; error?: string }>(
+// --- БЕЗПЕЧНИЙ ЗАПИТ З ДИНАМІЧНИМ JWT BEARER TOKEN ТА RETRY ---
+async function singleRequest<T extends { success: boolean; error?: string; detail?: string; token_expired?: boolean }>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
+  // Отримуємо актуальний JWT-токен користувача з MMKV
+  const jwtToken = storage.getString(AUTH_TOKEN_KEY);
+
   const headers: Record<string, string> = { 
     Accept: 'application/json',
-    Authorization: `Bearer ${API_MASTER_KEY}`,
+    ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
   };
   
   if (options.body !== undefined) {
@@ -247,8 +265,12 @@ async function singleRequest<T extends { success: boolean; error?: string }>(
       throw new ApiError('Сервер повернув некоректну відповідь.', 'parse');
     }
 
-    if (!response.ok || !data.success) {
-      throw new ApiError(data.error ?? `Помилка сервера (код ${response.status}).`, 'server');
+    if (response.status === 401) {
+      throw new ApiError('Сесія авторизації закінчилася або токен недійсний.', 'auth');
+    }
+
+    if (!response.ok || !data.success || data.token_expired) {
+      throw new ApiError(data.error ?? data.detail ?? `Помилка сервера (код ${response.status}).`, 'server');
     }
 
     return data;
@@ -265,8 +287,7 @@ async function singleRequest<T extends { success: boolean; error?: string }>(
   }
 }
 
-// Обгортка з автоматичним повторенням запиту при зникненні інтернету
-async function request<T extends { success: boolean; error?: string }>(
+async function request<T extends { success: boolean; error?: string; detail?: string; token_expired?: boolean }>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
@@ -279,7 +300,6 @@ async function request<T extends { success: boolean; error?: string }>(
       lastError = error;
       if (error instanceof ApiError && (error.kind === 'network' || error.kind === 'timeout')) {
         if (attempt < MAX_RETRIES) {
-          console.warn(`Мережевий збій (спроба ${attempt}/${MAX_RETRIES}). Повторюємо через ${RETRY_DELAY_MS}мс...`);
           await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
           continue;
         }
@@ -293,6 +313,9 @@ async function request<T extends { success: boolean; error?: string }>(
 
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.kind === 'auth') {
+      return 'Помилка авторизації. Будь ласка, увійдіть у систему заново.';
+    }
     return error.message;
   }
   return 'Сталася неочікувана помилка.';
@@ -322,16 +345,29 @@ export class ApiService {
       bodyData.token = shop.token;
     }
 
-    const data = await request<OrdersResponse>('/api/orders', {
-      method: 'POST',
-      body: bodyData,
-    });
+    try {
+      const data = await request<OrdersResponse>('/api/orders', {
+        method: 'POST',
+        body: bodyData,
+      });
 
-    return (data.orders ?? []).map((order) => ({
-      ...mapOrder(order),
-      shopId: shop.id,
-      shopName: shop.name,
-    }));
+      if (data.token_expired) {
+        markShopTokenExpired(shop.id);
+        throw new Error(`TOKEN_EXPIRED:${shop.id}`);
+      }
+
+      return (data.orders ?? []).map((order) => ({
+        ...mapOrder(order),
+        shopId: shop.id,
+        shopName: shop.name,
+      }));
+    } catch (error) {
+      // Якщо сервер відповів простроченим токеном або помилкою авторизації магазину
+      if (error instanceof ApiError && error.message.toLowerCase().includes('token')) {
+        markShopTokenExpired(shop.id);
+      }
+      throw error;
+    }
   }
 
   static async getAllOrders(): Promise<Order[]> {
@@ -373,56 +409,69 @@ export class ApiService {
       aiBody.token = shop.token;
     }
 
-    const data = await request<AIResponse>('/api/process-ai', {
-      method: 'POST',
-      body: aiBody,
-    });
+    try {
+      const data = await request<AIResponse>('/api/process-ai', {
+        method: 'POST',
+        body: aiBody,
+      });
 
-    if (!data.ai_report) {
-      throw new ApiError('ШІ не повернув звіт.', 'parse');
+      if (data.token_expired) {
+        markShopTokenExpired(shop.id);
+        throw new Error(`TOKEN_EXPIRED:${shop.id}`);
+      }
+
+      if (!data.ai_report) {
+        throw new ApiError('ШІ не повернув звіт.', 'parse');
+      }
+
+      const report = mapOrder(data.ai_report);
+      const orderTotalAmount = typeof order.totalAmount === 'number' ? order.totalAmount : 0;
+      const reportItems = report.items ?? [];
+      const orderItems = order.items ?? [];
+
+      return {
+        ...order,
+        ...report,
+        id: report.id || order.id,
+        orderNumber: report.orderNumber || order.orderNumber,
+        customerName: report.customerName || order.customerName,
+        phone: report.phone || order.phone,
+        city: report.city || order.city,
+        region: report.region || order.region,
+        postalCode: report.postalCode || order.postalCode,
+        country: report.country || order.country,
+        deliveryAddress: report.deliveryAddress || order.deliveryAddress,
+        deliveryMethod: report.deliveryMethod || order.deliveryMethod,
+        email: report.email || order.email,
+        status: order.status,
+        totalAmount: report.totalAmountFormatted ? report.totalAmount : orderTotalAmount,
+        totalAmountFormatted: report.totalAmountFormatted || order.totalAmountFormatted,
+        currency: report.currency || order.currency,
+        createdAt: report.createdAt || order.createdAt,
+        items: reportItems.length
+          ? reportItems.map((item, index) => {
+              const original = orderItems[index];
+              const itemPrice = typeof item.price === 'number' ? item.price : 0;
+              const originalPrice = original && typeof original.price === 'number' ? original.price : 0;
+              return {
+                ...item,
+                price: itemPrice || originalPrice || 0,
+                lineTotal: item.lineTotal ?? original?.lineTotal,
+                lineTotalFormatted: item.lineTotalFormatted || original?.lineTotalFormatted,
+              };
+            })
+          : orderItems,
+        aiSummary: report.aiSummary || text(asRecord(data.ai_report)?.ai_summary) || '',
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('TOKEN_EXPIRED:')) {
+        markShopTokenExpired(shop.id);
+        throw new Error(`TOKEN_EXPIRED:${shop.id}`);
+      }
+      throw error;
     }
-    const report = mapOrder(data.ai_report);
-    const orderTotalAmount = typeof order.totalAmount === 'number' ? order.totalAmount : 0;
-    const reportItems = report.items ?? [];
-    const orderItems = order.items ?? [];
-
-    return {
-      ...order,
-      ...report,
-      id: report.id || order.id,
-      orderNumber: report.orderNumber || order.orderNumber,
-      customerName: report.customerName || order.customerName,
-      phone: report.phone || order.phone,
-      city: report.city || order.city,
-      region: report.region || order.region,
-      postalCode: report.postalCode || order.postalCode,
-      country: report.country || order.country,
-      deliveryAddress: report.deliveryAddress || order.deliveryAddress,
-      deliveryMethod: report.deliveryMethod || order.deliveryMethod,
-      email: report.email || order.email,
-      status: order.status,
-      totalAmount: report.totalAmountFormatted ? report.totalAmount : orderTotalAmount,
-      totalAmountFormatted: report.totalAmountFormatted || order.totalAmountFormatted,
-      currency: report.currency || order.currency,
-      createdAt: report.createdAt || order.createdAt,
-      items: reportItems.length
-        ? reportItems.map((item, index) => {
-            const original = orderItems[index];
-            const itemPrice = typeof item.price === 'number' ? item.price : 0;
-            const originalPrice = original && typeof original.price === 'number' ? original.price : 0;
-            return {
-              ...item,
-              price: itemPrice || originalPrice || 0,
-              lineTotal: item.lineTotal ?? original?.lineTotal,
-              lineTotalFormatted: item.lineTotalFormatted || original?.lineTotalFormatted,
-            };
-          })
-        : orderItems,
-      aiSummary: report.aiSummary || text(asRecord(data.ai_report)?.ai_summary) || '',
-    };
   }
 
-  // --- МЕТОД ДЛЯ АВТОМАТИЧНОГО ПОШТОВОГО ТРЕКІНГУ ---
   static async trackParcel(trackingNumber: string, carrier: string = 'Нова Пошта'): Promise<{
     success: boolean;
     carrier?: string;
@@ -440,7 +489,6 @@ export class ApiService {
     });
   }
 
-  // --- МЕТОД РЕЄСТРАЦІЇ PUSH-ТОКЕНА НА СЕРВЕРІ ---
   static async registerPushToken(pushToken: string): Promise<void> {
     try {
       await request('/api/notifications/register', {

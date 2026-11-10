@@ -40,7 +40,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
     fields: [
       { key: 'api_token', label: 'API Token Епіцентр', secure: true, placeholder: 'Ключ інтеграції з кабінету' }
     ]
-  },
+  },                                                                                                               
   {
     id: 'allo',
     name: 'Allo (Алло)',
