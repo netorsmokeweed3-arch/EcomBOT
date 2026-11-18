@@ -11,9 +11,11 @@ import {
   ScrollView, 
   ActivityIndicator,
   Platform,
-  KeyboardAvoidingView 
+  KeyboardAvoidingView,
+  Image 
 } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../theme/ThemeContext';
 import { AuraHeader } from '../components/AuraHeader';
 import { MARKETPLACES, MarketplaceConfig, MarketplaceField } from '../constants/marketplaces';
@@ -27,6 +29,39 @@ const STORAGE_KEYS = {
   SERVER_URL: 'server_url',
   EXPIRED_TOKENS: 'expired_tokens_map',
 } as const;
+
+// Точний словник іконок із твоїх реальних файлів у assets/marketplaces/
+const MARKETPLACE_LOGOS: Record<string, any> = {
+  aliexpress: require('../../assets/marketplaces/aliexpress.svg'),
+  allo: require('../../assets/marketplaces/allo.svg'),
+  amazon: require('../../assets/marketplaces/amazon.svg'),
+  artline: require('../../assets/marketplaces/artline.svg'),
+  brain: require('../../assets/marketplaces/brain.svg'),
+  citrus: require('../../assets/marketplaces/citrus.svg'),
+  click: require('../../assets/marketplaces/click.svg'),
+  comfy: require('../../assets/marketplaces/comfy.svg'),
+  custom_json: require('../../assets/marketplaces/custom_json.svg'),
+  ebay: require('../../assets/marketplaces/ebay.svg'),
+  eldorado: require('../../assets/marketplaces/eldorado.svg'),
+  elmir: require('../../assets/marketplaces/elmir.svg'),
+  epicentr: require('../../assets/marketplaces/epicentr.svg'),
+  etsy: require('../../assets/marketplaces/etsy.svg'),
+  foxtrot: require('../../assets/marketplaces/foxtrot.svg'),
+  izi: require('../../assets/marketplaces/izi.svg'),
+  magento: require('../../assets/marketplaces/magento.svg'),
+  moyo: require('../../assets/marketplaces/moyo.svg'),
+  other: require('../../assets/marketplaces/other.svg'),
+  prestashop: require('../../assets/marketplaces/prestashop.svg'),
+  prom: require('../../assets/marketplaces/prom.svg'),
+  salesdrive: require('../../assets/marketplaces/salesdrive.svg'),
+  shafa: require('../../assets/marketplaces/shafa.svg'),
+  shopify: require('../../assets/marketplaces/shopify.svg'),
+  shopify_plus: require('../../assets/marketplaces/shopify_plus.svg'),
+  sqsp: require('../../assets/marketplaces/sqsp.svg'),
+  telemart: require('../../assets/marketplaces/telemart.svg'),
+  wix: require('../../assets/marketplaces/wix.svg'),
+  woocommerce: require('../../assets/marketplaces/woocommerce.svg'),
+};
 
 interface ShopCardProps {
   shop: ShopIntegration;
@@ -111,50 +146,96 @@ const ShopCard = memo(({ shop, isVisible, isExpired, onToggleToken, onDelete, on
 
 ShopCard.displayName = 'ShopCard';
 
-interface MarketplaceGridProps {
+// Безпечний компонент для рендерингу іконок (SVG як компонент або звичайне зображення)
+const SgIcon = ({ icon: IconComponent }: { icon: any }) => {
+  // Витягуємо компонент, якщо він ховається всередині .default (як це робить svg-transformer)
+  const ResolvedIcon = IconComponent?.default || IconComponent;
+
+  if (typeof ResolvedIcon === 'function') {
+    return <ResolvedIcon width={20} height={20} />;
+  }
+  
+  return <Image source={IconComponent} style={styles.brandLogoImage} />;
+};
+
+interface CategorizedMarketplaceSelectorProps {
   selectedId: string;
   onSelect: (item: MarketplaceConfig) => void;
   theme: any;
 }
 
-const MarketplaceGrid = memo(({ selectedId, onSelect, theme }: MarketplaceGridProps) => {
+const CATEGORIES = [
+  { key: 'ukraine', title: '🇺🇦 Українські маркетплейси' },
+  { key: 'retail', title: '💻 Комп’ютерні магазини та ритейл' },
+  { key: 'international', title: '🌍 Міжнародні маркетплейси' },
+  { key: 'cms', title: '🛒 CMS та інтернет-магазини' },
+  { key: 'crm', title: '📊 CRM та джерела замовлень' },
+];
+
+const CategorizedMarketplaceSelector = memo(({ selectedId, onSelect, theme }: CategorizedMarketplaceSelectorProps) => {
   return (
     <View style={styles.selectorContainer}>
-      <Text style={[styles.label, { color: theme.textPrimary }]}>Оберіть платформу або маркетплейс</Text>
-      <View style={styles.gridContainer}>
-        {MARKETPLACES.map((item) => {
-          const isSelected = selectedId === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.gridCard,
-                { 
-                  backgroundColor: isSelected ? theme.primary : theme.cardBg, 
-                  borderColor: isSelected ? theme.primary : theme.cardBorder 
-                }
-              ]}
-              onPress={() => onSelect(item)}
-              activeOpacity={0.75}
-            >
-              <Text 
-                style={[
-                  styles.gridCardText, 
-                  { color: isSelected ? theme.bgDark : theme.textPrimary, textAlign: 'center' }
-                ]} 
-                numberOfLines={2}
-              >
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <Text style={[styles.label, { color: theme.textPrimary, fontSize: 15, marginBottom: 10 }]}>
+        Оберіть платформу або маркетплейс
+      </Text>
+
+      {CATEGORIES.map((cat) => {
+        const items = MARKETPLACES.filter((m) => m.category === cat.key);
+        if (items.length === 0) return null;
+
+        return (
+          <View key={cat.key} style={styles.categoryBlock}>
+            <Text style={[styles.categoryTitle, { color: theme.primary }]}>{cat.title}</Text>
+            <View style={styles.gridContainer}>
+              {items.map((item, index) => {
+                const isSelected = selectedId === item.id;
+                const logoSource = MARKETPLACE_LOGOS[item.id];
+
+                return (
+                  <TouchableOpacity
+                    key={`${item.id}-${index}`}
+                    style={[
+                      styles.gridCard,
+                      { 
+                        backgroundColor: isSelected ? theme.primary : theme.cardBg, 
+                        borderColor: isSelected ? theme.primary : theme.cardBorder 
+                      }
+                    ]}
+                    onPress={() => onSelect(item)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.iconContainer, { backgroundColor: isSelected ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.06)' }]}>
+                      {logoSource ? (
+                        <SgIcon icon={logoSource} />
+                      ) : (
+                        <Ionicons 
+                          name="storefront-outline" 
+                          size={16} 
+                          color={isSelected ? theme.bgDark : theme.primary} 
+                        />
+                      )}
+                    </View>
+                    <Text 
+                      style={[
+                        styles.gridCardText, 
+                        { color: isSelected ? theme.bgDark : theme.textPrimary, textAlign: 'center' }
+                      ]} 
+                      numberOfLines={2}
+                    >
+                      {item.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 });
 
-MarketplaceGrid.displayName = 'MarketplaceGrid';
+CategorizedMarketplaceSelector.displayName = 'CategorizedMarketplaceSelector';
 
 export default function IntegrationsScreen() {
   const { theme } = useAppTheme();
@@ -370,7 +451,7 @@ export default function IntegrationsScreen() {
               Оберіть платформу із каталогу нижче та введіть необхідні ключі доступу.
             </Text>
 
-            <MarketplaceGrid 
+            <CategorizedMarketplaceSelector 
               selectedId={selectedMarketplace.id} 
               onSelect={handleSelectMarketplace} 
               theme={theme} 
@@ -431,9 +512,13 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 4 },
   selectorContainer: { marginBottom: 12 },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  gridCard: { width: '31%', minHeight: 52, padding: 8, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  gridCardText: { fontSize: 11, fontWeight: '700' },
+  categoryBlock: { marginBottom: 16 },
+  categoryTitle: { fontSize: 13, fontWeight: '800', marginBottom: 8, marginLeft: 2 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gridCard: { width: '31%', minHeight: 76, padding: 8, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  iconContainer: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 4, overflow: 'hidden' },
+  brandLogoImage: { width: 20, height: 20, resizeMode: 'contain' },
+  gridCardText: { fontSize: 10, fontWeight: '700' },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 14 },
   selectedPlatformHeader: { fontSize: 14, fontWeight: '800', marginBottom: 12 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 10 },
