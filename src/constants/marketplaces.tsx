@@ -18,7 +18,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   // --- Топ українських маркетплейсів (2026) ---
   {
     id: 'rozetka',
-    name: 'Rozetka (Seller API v2)',
+    name: 'Rozetka',
     icon: 'rozetka-icon',
     fields: [
       { key: 'client_id', label: 'Client ID / Логін', secure: false, placeholder: 'ID кабінету Розетки' },
@@ -27,7 +27,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'prom',
-    name: 'Prom.ua (API v1)',
+    name: 'Prom.ua',
     icon: 'prom-icon',
     fields: [
       { key: 'token', label: 'Токен продавця Prom (API Key)', secure: true, placeholder: 'Токен з кабінету Prom (налаштування API)' }
@@ -35,7 +35,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'epicentr',
-    name: 'Епіцентр (Маркетплейс)',
+    name: 'Епіцентр',
     icon: 'epicentr-icon',
     fields: [
       { key: 'api_token', label: 'API Token Епіцентр', secure: true, placeholder: 'Ключ інтеграції з кабінету' }
@@ -43,7 +43,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },                                                                                                               
   {
     id: 'allo',
-    name: 'Allo (Алло)',
+    name: 'Allo',
     icon: 'allo-icon',
     fields: [
       { key: 'partner_id', label: 'Partner ID', secure: false, placeholder: 'Ваш ID партнера' },
@@ -52,7 +52,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'foxtrot',
-    name: 'Foxtrot (Фокстрот)',
+    name: 'Фокстрот',
     icon: 'foxtrot-icon',
     fields: [
       { key: 'api_token', label: 'API Token Фокстрот', secure: true, placeholder: 'Токен доступу до API' }
@@ -93,15 +93,15 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'citrus',
-    name: 'Citrus (Цитрус)',
+    name: 'Цитрус',
     icon: 'citrus-icon',
     fields: [
-      { key: 'api_token', label: 'API Token Citrus', secure: true, placeholder: 'Токен інтеграції Цитрус' }
+      { key: 'api_token', label: 'API Token Цитрус', secure: true, placeholder: 'Токен інтеграції Цитрус' }
     ]
   },
   {
     id: 'eldorado',
-    name: 'DiDi Insider / колишній Eldorado',
+    name: 'DiDi Insider',
     icon: 'eldorado-icon',
     fields: [
       { key: 'api_token', label: 'API Token', secure: true, placeholder: 'Ключ доступу' }
@@ -125,7 +125,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'olx',
-    name: 'OLX Україна (Business / API v2)',
+    name: 'OLX Україна',
     icon: 'olx-icon',
     fields: [
       { key: 'client_id', label: 'Client ID', secure: false, placeholder: 'OLX Client ID' },
@@ -160,7 +160,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'brain',
-    name: 'Brain Computers / ITbox',
+    name: 'Brain / ITbox',
     icon: 'brain-icon',
     fields: [
       { key: 'api_token', label: 'B2B API Token / Ключ', secure: true, placeholder: 'Токен доступу Brain' }
@@ -184,7 +184,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'elmir',
-    name: 'Elmir (Електронний Світ)',
+    name: 'Elmir',
     icon: 'elmir-icon',
     fields: [
       { key: 'api_token', label: 'API Token Elmir', secure: true, placeholder: 'Токен з кабінету' }
@@ -202,7 +202,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   // --- Міжнародні маркетплейси ---
   {
     id: 'aliexpress',
-    name: 'AliExpress (Open Platform)',
+    name: 'AliExpress',
     icon: 'aliexpress-icon',
     fields: [
       { key: 'app_key', label: 'App Key', secure: false, placeholder: 'AliExpress App Key' },
@@ -212,7 +212,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'amazon',
-    name: 'Amazon (SP-API 2026)',
+    name: 'Amazon',
     icon: 'amazon-icon',
     fields: [
       { key: 'seller_id', label: 'Seller ID', secure: false, placeholder: 'ID продавця на Amazon' },
@@ -222,7 +222,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'ebay',
-    name: 'eBay (OAuth v3)',
+    name: 'eBay',
     icon: 'ebay-icon',
     fields: [
       { key: 'auth_token', label: 'OAuth User Token', secure: true, placeholder: 'eBay Auth Token' }
@@ -230,7 +230,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'etsy',
-    name: 'Etsy (Open API v3)',
+    name: 'Etsy',
     icon: 'etsy-icon',
     fields: [
       { key: 'keystring', label: 'Etsy Keystring / API Key', secure: false, placeholder: 'API Key' },
@@ -239,7 +239,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'joom',
-    name: 'Joom Merchant',
+    name: 'Joom',
     icon: 'joom-icon',
     fields: [
       { key: 'access_token', label: 'Access Token', secure: true, placeholder: 'Токен Joom' }
@@ -249,7 +249,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   // --- CMS та платформи для власних інтернет-магазинів ---
   {
     id: 'woocommerce',
-    name: 'WooCommerce (WordPress)',
+    name: 'WooCommerce',
     icon: 'woo-icon',
     fields: [
       { key: 'consumer_key', label: 'Consumer Key (ck_...)', secure: false, placeholder: 'ck_xxxxxxxxxxxxxxxx' },
@@ -277,7 +277,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'magento',
-    name: 'Magento / Adobe Commerce',
+    name: 'Magento',
     icon: 'magento-icon',
     fields: [
       { key: 'store_url', label: 'URL сайту', secure: false, placeholder: 'https://my-magento.com' },
@@ -295,7 +295,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'horoshop',
-    name: 'Horoshop (Хорошоп)',
+    name: 'Horoshop',
     icon: 'horoshop-icon',
     fields: [
       { key: 'api_token', label: 'API Token Хорошоп', secure: true, placeholder: 'Токен з панелі Хорошоп' }
@@ -328,7 +328,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'wix',
-    name: 'Wix eCommerce',
+    name: 'Wix',
     icon: 'wix-icon',
     fields: [
       { key: 'api_key', label: 'API Key / App Secret', secure: true, placeholder: 'Wix API Key' },
@@ -373,7 +373,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'tilda',
-    name: 'Tilda Publishing',
+    name: 'Tilda',
     icon: 'tilda-icon',
     fields: [
       { key: 'public_key', label: 'Public Key', secure: false, placeholder: 'Публічний ключ' },
@@ -382,7 +382,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'bitrix24',
-    name: 'Bitrix24 (REST Webhook)',
+    name: 'Bitrix24',
     icon: 'bitrix-icon',
     fields: [
       { key: 'webhook_url', label: 'Webhook URL', secure: true, placeholder: 'https://b24-xxx.bitrix24.ua/rest/...' }
@@ -390,7 +390,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'bas',
-    name: 'BAS / 1С (через зовнішній модуль)',
+    name: 'BAS / 1С',
     icon: 'bas-icon',
     fields: [
       { key: 'endpoint_url', label: 'URL веб-сервісу BAS', secure: false, placeholder: 'https://your-bas-server.com/hs/api/v1' },
@@ -399,7 +399,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'custom_json',
-    name: 'Webhook / Custom JSON Parser',
+    name: 'Webhook JSON',
     icon: 'custom-icon',
     fields: [
       { key: 'endpoint_url', label: 'Unique Webhook URL', secure: false, placeholder: 'Створений системою лінк' },
@@ -408,7 +408,7 @@ export const MARKETPLACES: MarketplaceConfig[] = [
   },
   {
     id: 'other',
-    name: 'Інший кастомний магазин',
+    name: 'Інший магазин',
     icon: 'other-icon',
     fields: [
       { key: 'endpoint_url', label: 'API Endpoint URL', secure: false, placeholder: 'https://api.shop.com/orders' },

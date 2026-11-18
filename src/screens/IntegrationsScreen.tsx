@@ -11,29 +11,22 @@ import {
   ScrollView, 
   ActivityIndicator,
   Platform,
-  FlatList,
   KeyboardAvoidingView 
 } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
 import { useAppTheme } from '../theme/ThemeContext';
 import { AuraHeader } from '../components/AuraHeader';
 import { MARKETPLACES, MarketplaceConfig, MarketplaceField } from '../constants/marketplaces';
+import { ApiService } from '../services/api';
+import { ShopIntegration } from '../types/shop';
 
 const storage = createMMKV();
 export const RENDER_SERVER_URL = 'https://ecombot-2.onrender.com';
 
 const STORAGE_KEYS = {
-  SAVED_SHOPS: 'saved_shops',
   SERVER_URL: 'server_url',
   EXPIRED_TOKENS: 'expired_tokens_map',
 } as const;
-
-interface ShopIntegration {
-  id: string;
-  platformId: string;
-  platformName: string;
-  credentials: Record<string, string>;
-}
 
 interface ShopCardProps {
   shop: ShopIntegration;
@@ -48,20 +41,29 @@ const ShopCard = memo(({ shop, isVisible, isExpired, onToggleToken, onDelete, on
   const { theme } = useAppTheme();
 
   const credentialsSummary = useMemo(() => {
-    return Object.entries(shop.credentials)
+    const creds: Record<string, string> = shop.credentials || {
+      ...(shop.token ? { token: shop.token } : {}),
+      ...(shop.consumer_key ? { consumer_key: shop.consumer_key } : {}),
+      ...(shop.consumer_secret ? { consumer_secret: shop.consumer_secret } : {}),
+    };
+
+    return Object.entries(creds)
       .map(([key, val]) => {
-        const masked = '•'.repeat(Math.min(val.length, 16));
-        return `${key}: ${isVisible ? val : masked}`;
+        const strVal = String(val || '');
+        const masked = '•'.repeat(Math.min(strVal.length, 16));
+        return `${key}: ${isVisible ? strVal : masked}`;
       })
       .join(' | ');
-  }, [shop.credentials, isVisible]);
+  }, [shop, isVisible]);
+
+  const displayName = shop.platformName || shop.name || shop.platform || 'Магазин';
 
   return (
     <View style={[styles.shopCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: isExpired ? '#ff3b30' : theme.cardBorder }]}>
       <View style={styles.shopInfo}>
         <View style={styles.rowBetween}>
           <Text style={[styles.shopName, { color: theme.textPrimary }]} numberOfLines={1}>
-            {shop.platformName}
+            {displayName}
           </Text>
           {isExpired && (
             <View style={styles.expiredBadge}>
@@ -109,53 +111,50 @@ const ShopCard = memo(({ shop, isVisible, isExpired, onToggleToken, onDelete, on
 
 ShopCard.displayName = 'ShopCard';
 
-interface MarketplaceSelectorProps {
+interface MarketplaceGridProps {
   selectedId: string;
   onSelect: (item: MarketplaceConfig) => void;
   theme: any;
 }
 
-const MarketplaceSelector = memo(({ selectedId, onSelect, theme }: MarketplaceSelectorProps) => {
-  const renderItem = useCallback(({ item }: { item: MarketplaceConfig }) => {
-    const isSelected = selectedId === item.id;
-    return (
-      <TouchableOpacity
-        style={[
-          styles.chip,
-          { 
-            backgroundColor: isSelected ? theme.primary : theme.cardBg, 
-            borderColor: isSelected ? theme.primary : theme.cardBorder 
-          }
-        ]}
-        onPress={() => onSelect(item)}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.chipText, { color: isSelected ? theme.bgDark : theme.textPrimary }]}>
-          {item.name}
-        </Text>
-      </TouchableOpacity>
-    );
-  }, [selectedId, onSelect, theme]);
-
+const MarketplaceGrid = memo(({ selectedId, onSelect, theme }: MarketplaceGridProps) => {
   return (
     <View style={styles.selectorContainer}>
       <Text style={[styles.label, { color: theme.textPrimary }]}>Оберіть платформу або маркетплейс</Text>
-      <FlatList
-        data={MARKETPLACES}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipsScroll}
-        initialNumToRender={8}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-      />
+      <View style={styles.gridContainer}>
+        {MARKETPLACES.map((item) => {
+          const isSelected = selectedId === item.id;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.gridCard,
+                { 
+                  backgroundColor: isSelected ? theme.primary : theme.cardBg, 
+                  borderColor: isSelected ? theme.primary : theme.cardBorder 
+                }
+              ]}
+              onPress={() => onSelect(item)}
+              activeOpacity={0.75}
+            >
+              <Text 
+                style={[
+                  styles.gridCardText, 
+                  { color: isSelected ? theme.bgDark : theme.textPrimary, textAlign: 'center' }
+                ]} 
+                numberOfLines={2}
+              >
+                {item.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 });
 
-MarketplaceSelector.displayName = 'MarketplaceSelector';
+MarketplaceGrid.displayName = 'MarketplaceGrid';
 
 export default function IntegrationsScreen() {
   const { theme } = useAppTheme();
@@ -169,18 +168,19 @@ export default function IntegrationsScreen() {
   const [showSecureFields, setShowSecureFields] = useState<Record<string, boolean>>({});
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     try {
-      const savedShopsJson = storage.getString(STORAGE_KEYS.SAVED_SHOPS);
-      if (savedShopsJson) {
-        const parsed = JSON.parse(savedShopsJson);
-        if (Array.isArray(parsed)) setShops(parsed);
+      const savedShops = await ApiService.getSavedShops();
+      if (Array.isArray(savedShops)) {
+        setShops(savedShops);
       }
 
       const expiredJson = storage.getString(STORAGE_KEYS.EXPIRED_TOKENS);
       if (expiredJson) {
         const parsedExpired = JSON.parse(expiredJson);
-        if (typeof parsedExpired === 'object') setExpiredMap(parsedExpired);
+        if (parsedExpired && typeof parsedExpired === 'object') {
+          setExpiredMap(parsedExpired as Record<string, boolean>);
+        }
       }
     } catch (error) {
       console.log('Помилка завантаження даних інтеграцій', error);
@@ -205,7 +205,7 @@ export default function IntegrationsScreen() {
     setShowSecureFields((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     for (const field of selectedMarketplace.fields) {
       const val = formValues[field.key]?.trim();
       if (!val) {
@@ -220,17 +220,20 @@ export default function IntegrationsScreen() {
     try {
       const newShop: ShopIntegration = {
         id: Date.now().toString(),
+        name: selectedMarketplace.name,
+        platform: selectedMarketplace.id,
         platformId: selectedMarketplace.id,
         platformName: selectedMarketplace.name,
         credentials: { ...formValues },
+        token: formValues['token'] || formValues['access_token'] || formValues['api_token'] || formValues['api_key'] || '',
+        consumer_key: formValues['consumer_key'],
+        consumer_secret: formValues['consumer_secret'],
       };
 
-      const updatedShops = [...shops, newShop];
+      const updatedShops = await ApiService.saveShop(newShop);
       setShops(updatedShops);
-      storage.set(STORAGE_KEYS.SAVED_SHOPS, JSON.stringify(updatedShops));
       storage.set(STORAGE_KEYS.SERVER_URL, RENDER_SERVER_URL);
 
-      // Знімаємо статус прострочення для щойно збереженого магазину
       const newExpiredMap = { ...expiredMap, [newShop.id]: false };
       setExpiredMap(newExpiredMap);
       storage.set(STORAGE_KEYS.EXPIRED_TOKENS, JSON.stringify(newExpiredMap));
@@ -243,9 +246,9 @@ export default function IntegrationsScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [selectedMarketplace, formValues, isSaving, shops, expiredMap]);
+  }, [selectedMarketplace, formValues, isSaving, expiredMap]);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     Alert.alert(
       'Видалення',
       'Ви дійсно хочете видалити цей магазин?',
@@ -254,12 +257,13 @@ export default function IntegrationsScreen() {
         {
           text: 'Видалити',
           style: 'destructive',
-          onPress: () => {
-            setShops((prevShops) => {
-              const updatedShops = prevShops.filter((shop) => shop.id !== id);
-              storage.set(STORAGE_KEYS.SAVED_SHOPS, JSON.stringify(updatedShops));
-              return updatedShops;
-            });
+          onPress: async () => {
+            try {
+              const updatedShops = await ApiService.deleteShop(id);
+              setShops(updatedShops);
+            } catch (error) {
+              console.log('Помилка видалення магазину', error);
+            }
           },
         },
       ]
@@ -267,10 +271,15 @@ export default function IntegrationsScreen() {
   }, []);
 
   const handleRefreshShopToken = useCallback((shop: ShopIntegration) => {
-    const market = MARKETPLACES.find((m) => m.id === shop.platformId);
+    const marketId = shop.platformId || shop.platform;
+    const market = MARKETPLACES.find((m) => m.id === marketId);
     if (market) {
       setSelectedMarketplace(market);
-      setFormValues(shop.credentials);
+      setFormValues(shop.credentials || {
+        ...(shop.token ? { token: shop.token } : {}),
+        ...(shop.consumer_key ? { consumer_key: shop.consumer_key } : {}),
+        ...(shop.consumer_secret ? { consumer_secret: shop.consumer_secret } : {}),
+      });
       handleDelete(shop.id);
       Alert.alert('Оновлення токена', 'Введіть нові актуальні дані та натисніть «Зберегти інтеграцію».');
     }
@@ -358,14 +367,19 @@ export default function IntegrationsScreen() {
           <View style={[styles.formCard, { backgroundColor: 'rgba(18, 22, 32, 0.75)', borderColor: theme.cardBorder }]}>
             <Text style={[styles.title, { color: theme.textPrimary }]}>Підключення магазину</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              Оберіть платформу із каталогу та введіть необхідні ключі доступу для надійного зв'язку з агентами.
+              Оберіть платформу із каталогу нижче та введіть необхідні ключі доступу.
             </Text>
 
-            <MarketplaceSelector 
+            <MarketplaceGrid 
               selectedId={selectedMarketplace.id} 
               onSelect={handleSelectMarketplace} 
               theme={theme} 
             />
+
+            <View style={styles.divider} />
+            <Text style={[styles.selectedPlatformHeader, { color: theme.primary }]}>
+              Налаштування для: {selectedMarketplace.name}
+            </Text>
 
             {renderedDynamicFields}
 
@@ -417,9 +431,11 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 4 },
   selectorContainer: { marginBottom: 12 },
-  chipsScroll: { paddingVertical: 4, gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 6, height: 36, justifyContent: 'center', alignItems: 'center' },
-  chipText: { fontSize: 13, fontWeight: '700' },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  gridCard: { width: '31%', minHeight: 52, padding: 8, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  gridCardText: { fontSize: 11, fontWeight: '700' },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 14 },
+  selectedPlatformHeader: { fontSize: 14, fontWeight: '800', marginBottom: 12 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 10 },
   passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, marginBottom: 10 },
   passwordInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },

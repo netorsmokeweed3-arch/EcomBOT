@@ -1,5 +1,6 @@
 // src/services/api.ts
 import { createMMKV } from 'react-native-mmkv';
+import * as SecureStore from 'expo-secure-store';
 import { Order } from '../types/order';
 import { AIReport } from '../types/aiReport';
 import { ShopIntegration as BaseShopIntegration } from '../types/shop';
@@ -8,6 +9,7 @@ interface ShopIntegration extends BaseShopIntegration {
   consumer_key?: string;
   consumer_secret?: string;
   platform?: 'shopify' | 'woocommerce' | string;
+  credentials?: Record<string, string>;
 }
 
 const API_BASE_URL = 'https://ecombot-2.onrender.com';
@@ -35,7 +37,7 @@ export class ApiError extends Error {
 
 interface OrdersResponse {
   success: boolean;
-  orders?: unknown[];
+  orders?: ReadonlyArray<unknown>;
   token_expired?: boolean;
   error?: string;
   detail?: string;
@@ -103,7 +105,7 @@ function formattedMoney(value: unknown): string {
 function markShopTokenExpired(shopId: string) {
   try {
     const raw = storage.getString(EXPIRED_TOKENS_KEY);
-    const map = raw ? JSON.parse(raw) : {};
+    const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
     map[shopId] = true;
     storage.set(EXPIRED_TOKENS_KEY, JSON.stringify(map));
   } catch (e) {
@@ -193,7 +195,8 @@ function moneyPayload(value: number, currency: string, formatted?: string) {
 function toBackendOrder(order: Order): DataRecord {
   const currency = order.currency || 'UAH';
   const orderAmount = typeof order.totalAmount === 'number' ? order.totalAmount : 0;
-  const orderStatusText = typeof order.status === 'object' && order.status !== null ? order.status.text : (order.status || 'processing');
+  const statusObj = asRecord(order.status);
+  const orderStatusText = statusObj ? text(statusObj.text) : text(order.status) || 'processing';
 
   return {
     id: order.id,
@@ -230,7 +233,6 @@ function toBackendOrder(order: Order): DataRecord {
   };
 }
 
-// --- БЕЗПЕЧНИЙ ЗАПИТ З ДИНАМІЧНИМ JWT BEARER TOKEN ТА RETRY ---
 async function singleRequest<T extends { success: boolean; error?: string; detail?: string; token_expired?: boolean }>(
   path: string,
   options: RequestOptions = {}
@@ -238,8 +240,7 @@ async function singleRequest<T extends { success: boolean; error?: string; detai
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  // Отримуємо актуальний JWT-токен користувача з MMKV
-  const jwtToken = storage.getString(AUTH_TOKEN_KEY);
+  const jwtToken = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
 
   const headers: Record<string, string> = { 
     Accept: 'application/json',
@@ -322,28 +323,50 @@ export function getErrorMessage(error: unknown): string {
 }
 
 export class ApiService {
-  static getSavedShops(): ShopIntegration[] {
+  static async getSavedShops(): Promise<ShopIntegration[]> {
     try {
-      const json = storage.getString(SHOPS_STORAGE_KEY);
+      const json = await SecureStore.getItemAsync(SHOPS_STORAGE_KEY);
       return json ? (JSON.parse(json) as ShopIntegration[]) : [];
     } catch (error) {
-      console.warn('Не вдалося прочитати магазини з MMKV:', error);
+      console.warn('Не вдалося прочитати магазини з SecureStore:', error);
       return [];
     }
   }
 
+  static async saveShop(newShop: ShopIntegration): Promise<ShopIntegration[]> {
+    try {
+      const existing = await this.getSavedShops();
+      const updated = [...existing.filter(s => s.id !== newShop.id), newShop];
+      await SecureStore.setItemAsync(SHOPS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    } catch (error) {
+      console.warn('Не вдалося зберегти магазин у SecureStore:', error);
+      throw error;
+    }
+  }
+
+  static async deleteShop(shopId: string): Promise<ShopIntegration[]> {
+    try {
+      const existing = await this.getSavedShops();
+      const updated = existing.filter(s => s.id !== shopId);
+      await SecureStore.setItemAsync(SHOPS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    } catch (error) {
+      console.warn('Не вдалося видалити магазин із SecureStore:', error);
+      throw error;
+    }
+  }
+
   static async getOrders(shop: ShopIntegration): Promise<Order[]> {
+    // Універсально розгортаємо всі поля з credentials, щоб бекенд отримав правильні ключі (api_token, client_id тощо)
     const bodyData: Record<string, unknown> = {
       shop: shop.name,
       platform: shop.platform || 'shopify',
+      ...(shop.credentials || {}),
+      ...(shop.token ? { token: shop.token } : {}),
+      ...(shop.consumer_key ? { consumer_key: shop.consumer_key } : {}),
+      ...(shop.consumer_secret ? { consumer_secret: shop.consumer_secret } : {}),
     };
-
-    if (shop.platform === 'woocommerce') {
-      bodyData.consumer_key = shop.consumer_key;
-      bodyData.consumer_secret = shop.consumer_secret;
-    } else {
-      bodyData.token = shop.token;
-    }
 
     try {
       const data = await request<OrdersResponse>('/api/orders', {
@@ -362,7 +385,6 @@ export class ApiService {
         shopName: shop.name,
       }));
     } catch (error) {
-      // Якщо сервер відповів простроченим токеном або помилкою авторизації магазину
       if (error instanceof ApiError && error.message.toLowerCase().includes('token')) {
         markShopTokenExpired(shop.id);
       }
@@ -371,7 +393,7 @@ export class ApiService {
   }
 
   static async getAllOrders(): Promise<Order[]> {
-    const shops = this.getSavedShops();
+    const shops = await this.getSavedShops();
     if (shops.length === 0) {
       throw new ApiError('Немає підключених магазинів. Додайте магазин у «Інтеграціях».', 'config');
     }
@@ -400,14 +422,11 @@ export class ApiService {
       platform: shop.platform || 'shopify',
       order_data: toBackendOrder(order),
       chat_messages: chatHistory,
+      ...(shop.credentials || {}),
+      ...(shop.token ? { token: shop.token } : {}),
+      ...(shop.consumer_key ? { consumer_key: shop.consumer_key } : {}),
+      ...(shop.consumer_secret ? { consumer_secret: shop.consumer_secret } : {}),
     };
-
-    if (shop.platform === 'woocommerce') {
-      aiBody.consumer_key = shop.consumer_key;
-      aiBody.consumer_secret = shop.consumer_secret;
-    } else {
-      aiBody.token = shop.token;
-    }
 
     try {
       const data = await request<AIResponse>('/api/process-ai', {

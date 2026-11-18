@@ -1,8 +1,7 @@
 // src/services/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { createMMKV } from 'react-native-mmkv';
+import * as SecureStore from 'expo-secure-store';
 
-const storage = createMMKV();
 const TOKEN_KEY = 'auth_jwt_token';
 const USER_KEY = 'auth_user_data';
 
@@ -15,16 +14,16 @@ interface AuthContextType {
   token: string | null;
   user: User | null;
   isLoading: boolean;
-  login: (token: string, user: User) => void;
-  logout: () => void;
+  login: (token: string, user: User) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   token: null,
   user: null,
   isLoading: true,
-  login: () => {},
-  logout: () => {},
+  login: async () => {},
+  logout: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -33,22 +32,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    try {
-      const savedToken = storage.getString(TOKEN_KEY);
-      const savedUser = storage.getString(USER_KEY);
-      if (savedToken) setToken(savedToken);
-      if (savedUser) setUser(JSON.parse(savedUser));
-    } catch (e) {
-      console.error('[AuthContext Init Error]', e);
-    } finally {
-      setIsLoading(false);
-    }
+    let isMounted = true;
+    const loadAuthData = async () => {
+      try {
+        const savedToken = await SecureStore.getItemAsync(TOKEN_KEY);
+        const savedUser = await SecureStore.getItemAsync(USER_KEY);
+        if (isMounted) {
+          if (savedToken) setToken(savedToken);
+          if (savedUser) setUser(JSON.parse(savedUser) as User);
+        }
+      } catch (e) {
+        console.error('[AuthContext Init Error]', e);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    loadAuthData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
+  const login = async (newToken: string, newUser: User): Promise<void> => {
     try {
-      storage.set(TOKEN_KEY, newToken);
-      storage.set(USER_KEY, JSON.stringify(newUser));
+      await SecureStore.setItemAsync(TOKEN_KEY, newToken);
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
     } catch (e) {
@@ -56,10 +64,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async (): Promise<void> => {
     try {
-      storage.remove(TOKEN_KEY);
-      storage.remove(USER_KEY);
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
       setToken(null);
       setUser(null);
     } catch (e) {
